@@ -61,12 +61,15 @@ export default function AuthProvider({
                     headers
                 });
 
-            if (
-                response.status !== 401
-            ) {
-                if (!isApi) {
-                    return response;
-                }
+            // if (
+            //     response.status !== 401
+            // ) {
+            //     if (!isApi) {
+            //         return response;
+            //     }
+            // }
+            if (response.status !== 401) {
+                return response;
             }
 
             // Don't refresh the refresh request itself

@@ -404,6 +404,52 @@ export default function AdminPage() {
             Import IPTV Playlist
           </button>
 
+                <div className="
+                  mt-6
+                  bg-slate-900
+                  rounded-2xl
+                  p-6
+                  flex
+                  items-center
+                  justify-between
+                ">
+
+                  <div>
+                    <h2 className="
+                      text-2xl
+                      font-bold
+                      text-blue-400
+                    ">
+                      Music
+                    </h2>
+
+                    <p className="
+                      text-slate-400
+                      mt-1
+                    ">
+                      Download and manage music from YouTube and YouTube Music.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      window.location.href = '/admin/music'
+                    }
+                    className="
+                      bg-blue-600
+                      hover:bg-blue-500
+                      px-6
+                      py-3
+                      rounded-xl
+                      font-semibold
+                      transition
+                    "
+                  >
+                    Music Downloader
+                  </button>
+
+                </div>
+
           <input
             ref={fileInputRef}
             type="file"

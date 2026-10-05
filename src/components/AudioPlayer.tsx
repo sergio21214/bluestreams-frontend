@@ -18,6 +18,7 @@ import {
   MediaControls
 } from '@/app/lib/mediaControls';
 
+
 export default function AudioPlayer() {
 
   const API_URL =
@@ -31,146 +32,299 @@ export default function AudioPlayer() {
     syncToIndex,
     audioRef,
     closePlayer,
-    showPlayer
+    showPlayer,
+    playbackSessionRef
   } = useAudioPlayer();
+
 
   const queuedPlaylistRef =
     useRef<any[] | null>(null);
 
+
   const isNative =
     Capacitor.isNativePlatform();
-  
+
+
+  /*
+   * Last position sent to backend.
+   */
   const lastSavedPosition =
-  useRef(0);
+    useRef(0);
 
+
+  /*
+   * Periodic history-saving interval.
+   */
   const historyInterval =
-  useRef<NodeJS.Timeout | null>(null);
+    useRef<NodeJS.Timeout | null>(null);
 
-  const saveHistory = useCallback(
-    async (
-      completed = false,
-      track = currentTrack,
-      forcedPosition?: number
-    ) => {
 
-      if (!track) {
-        return;
-      }
+  /*
+   * Identifies which playback session has already
+   * been announced to the backend.
+   *
+   * Every time playTrack(), nextTrack(), previousTrack()
+   * or native track changes create a new session,
+   * playbackSessionRef.current changes.
+   *
+   * The first history request belonging to that session
+   * sends newSession=true.
+   */
+  const announcedSessionRef =
+    useRef<number | null>(null);
 
-      const profileId =
-        localStorage.getItem(
-          'profileId'
-        );
 
-      if (!profileId) {
-        return;
-      }
+  /*
+   * Save playback history.
+   *
+   * IMPORTANT:
+   *
+   * We no longer use position < 5 to determine
+   * whether this is a new play.
+   *
+   * Instead, the AudioPlayerContext gives us an
+   * explicit playback session ID.
+   */
+  const saveHistory =
+    useCallback(
+      async (
+        completed = false,
+        track = currentTrack,
+        forcedPosition?: number
+      ) => {
 
-      //let position = 0;
-
-      let position =
-        forcedPosition ??
-        Math.floor(audioRef.current?.currentTime || 0);
-
-      if (isNative) {
-
-        try {
-
-          const status =
-            await MediaControls.getStatus();
-
-          position =
-            Math.floor(
-              status.positionMs / 1000
-            );
-
-        } catch {
-
-          position = 0;
-
+        if (!track) {
+          return;
         }
 
-      } else {
 
-        position =
+        const profileId =
+          localStorage.getItem(
+            'profileId'
+          );
+
+        if (!profileId) {
+          return;
+        }
+
+
+        let position =
+          forcedPosition ??
           Math.floor(
             audioRef.current?.currentTime || 0
           );
 
-      }
 
-      const isForced =
-          forcedPosition !== undefined;
+        /*
+         * Native playback position.
+         */
+        if (isNative) {
 
-      if (
-          !isForced &&
-          !completed &&
-          position < 5
-      ) {
-          return;
-      }
-      console.log("TRACK OBJECT");
-      console.log(track);
-      console.log("TRACK ID", track.id);
-      const body = {
-          mediaId: track.id ?? track.mediaId,
-          positionSeconds: position,
-          completed
-      };
+          try {
 
-      console.log("Sending history", body);
+            const status =
+              await MediaControls.getStatus();
 
-      fetch(
-        `${API_URL}/music/history`,
-        {
+            /*
+             * Only use native status when we
+             * are not explicitly forcing a position.
+             */
+            if (
+              forcedPosition === undefined
+            ) {
 
-          method: 'POST',
+              position =
+                Math.floor(
+                  status.positionMs / 1000
+                );
 
-          headers: {
+            }
 
-            'Content-Type':
-              'application/json',
+          } catch {
 
-            'X-Profile-Id':
-              profileId
+            if (
+              forcedPosition === undefined
+            ) {
+              position = 0;
+            }
 
-          },
-
-          body: JSON.stringify({
-
-            mediaId:
-              track.id ?? track.mediaId,
-
-            positionSeconds:
-              position,
-
-            completed
-
-          })
+          }
 
         }
 
-      ).catch(console.error);
 
-    },
-    [API_URL, currentTrack, isNative]
-  );
+        /*
+         * Do not save insignificant automatic
+         * progress updates.
+         *
+         * Explicitly forced saves are still allowed.
+         *
+         * Completed saves are always allowed.
+         */
+        const isForced =
+          forcedPosition !== undefined;
 
+
+        if (
+          !isForced &&
+          !completed &&
+          position < 5
+        ) {
+          return;
+        }
+
+
+        /*
+         * Determine whether this is the first
+         * history request of the current playback session.
+         */
+        const sessionId =
+          playbackSessionRef?.current ?? 0;
+
+
+        const newSession =
+          announcedSessionRef.current !== sessionId;
+
+
+        if (newSession) {
+
+          announcedSessionRef.current =
+            sessionId;
+
+        }
+
+
+        const mediaId =
+          track.id ??
+          track.mediaId;
+
+
+        const body = {
+
+          mediaId,
+
+          positionSeconds:
+            position,
+
+          completed,
+
+          newSession
+
+        };
+
+
+        console.log(
+          '========== SAVE HISTORY =========='
+        );
+
+        console.log(
+          'Track:',
+          track.title
+        );
+
+        console.log(
+          'Media ID:',
+          mediaId
+        );
+
+        console.log(
+          'Position:',
+          position
+        );
+
+        console.log(
+          'Completed:',
+          completed
+        );
+
+        console.log(
+          'Session:',
+          sessionId
+        );
+
+        console.log(
+          'New Session:',
+          newSession
+        );
+
+        console.log(
+          '==================================='
+        );
+
+
+        fetch(
+          `${API_URL}/music/history`,
+          {
+
+            method: 'POST',
+
+            headers: {
+
+              'Content-Type':
+                'application/json',
+
+              'X-Profile-Id':
+                profileId
+
+            },
+
+            body:
+              JSON.stringify(body)
+
+          }
+        )
+        .catch(console.error);
+
+      },
+      [
+        API_URL,
+        currentTrack,
+        isNative,
+        audioRef,
+        playbackSessionRef
+      ]
+    );
+
+
+  /*
+   * Debug current track.
+   */
   useEffect(() => {
-    console.log("CURRENT TRACK");
-    console.log(currentTrack);
+
+    console.log(
+      'CURRENT TRACK'
+    );
+
+    console.log(
+      currentTrack
+    );
 
     if (currentTrack) {
-        console.log("id =", currentTrack.id);
-        console.log("mediaId =", currentTrack.mediaId);
+
+      console.log(
+        'id =',
+        currentTrack.id
+      );
+
+      console.log(
+        'mediaId =',
+        currentTrack.mediaId
+      );
+
     }
+
   }, [currentTrack]);
 
+
+  /*
+   * Native playback events.
+   */
   useEffect(() => {
 
     if (!isNative) {
       return;
     }
+
 
     const stateHandle =
       MediaControls.addListener(
@@ -178,19 +332,33 @@ export default function AudioPlayer() {
         () => {}
       );
 
+
+    /*
+     * Native track finished.
+     */
     const endedHandle =
       MediaControls.addListener(
         'trackEnded',
         async () => {
-          console.log('NATIVE TRACK ENDED');
-          await saveHistory(
-              true,
-              currentTrack,
-              0
+
+          console.log(
+            'NATIVE TRACK ENDED'
           );
+
+
+          await saveHistory(
+            true,
+            currentTrack,
+            0
+          );
+
         }
       );
 
+
+    /*
+     * Native queue changed track.
+     */
     const changedHandle =
       MediaControls.addListener(
         'trackChanged',
@@ -201,70 +369,136 @@ export default function AudioPlayer() {
             event.index
           );
 
+
+          /*
+           * Save the previous track.
+           *
+           * Position 0 here is intentional:
+           * we are explicitly saving the transition,
+           * not telling the backend to reset a session.
+           */
           await saveHistory(
-              false,
-              currentTrack,
-              0
+            false,
+            currentTrack,
+            0
           );
-          syncToIndex(event.index);
+
+
+          syncToIndex(
+            event.index
+          );
+
         }
       );
 
+
     return () => {
 
-      stateHandle.then(h => h.remove());
-      endedHandle.then(h => h.remove());
-      changedHandle.then(h => h.remove());
+      stateHandle.then(
+        h => h.remove()
+      );
+
+      endedHandle.then(
+        h => h.remove()
+      );
+
+      changedHandle.then(
+        h => h.remove()
+      );
 
     };
 
-  }, [isNative, syncToIndex]);
+  }, [
+    isNative,
+    currentTrack,
+    saveHistory,
+    syncToIndex
+  ]);
 
+
+  /*
+   * Native playlist / queue setup.
+   */
   useEffect(() => {
 
+    if (!isNative) {
+      return;
+    }
+
+
     if (
-      !isNative ||
       !currentTrack ||
       playlist.length === 0
     ) {
       return;
     }
 
-    if (queuedPlaylistRef.current === playlist) {
+
+    if (
+      queuedPlaylistRef.current === playlist
+    ) {
       return;
     }
 
-    queuedPlaylistRef.current = playlist;
+
+    queuedPlaylistRef.current =
+      playlist;
+
 
     const startIndex =
       Math.max(
         0,
         playlist.findIndex(
-          (p: any) => p.id === (currentTrack.id ?? currentTrack.mediaId)
+          (p: any) =>
+            p.id ===
+            (
+              currentTrack.id ??
+              currentTrack.mediaId
+            )
         )
       );
 
+
     const tracks =
-      playlist.map((track: any) => ({
-        url: `${API_URL}/music/stream/${track.id}`,
-        title: track.title,
-        artist: track.artist || '',
-        album: track.album || '',
-        artwork: track.poster
-      }));
+      playlist.map(
+        (track: any) => ({
+
+          url:
+            `${API_URL}/music/stream/${track.id}`,
+
+          title:
+            track.title,
+
+          artist:
+            track.artist || '',
+
+          album:
+            track.album || '',
+
+          artwork:
+            track.poster
+
+        })
+      );
+
 
     MediaControls
       .setQueue({
         tracks,
         startIndex
       })
-      .then(() => MediaControls.play())
-      .catch(err =>
-        console.error(
-          'Native setQueue failed',
-          err
-        )
+      .then(
+        () =>
+          MediaControls.play()
+      )
+      .catch(
+        err =>
+          console.error(
+            'Native setQueue failed',
+            err
+          )
       );
+
 
   }, [
     isNative,
@@ -273,14 +507,20 @@ export default function AudioPlayer() {
     API_URL
   ]);
 
+
+  /*
+   * Browser audio setup.
+   */
   useEffect(() => {
 
     if (isNative) {
       return;
     }
 
+
     const audio =
       audioRef.current;
+
 
     if (
       !audio ||
@@ -289,29 +529,54 @@ export default function AudioPlayer() {
       return;
     }
 
+
     audio.pause();
 
+
     audio.src =
-      `${API_URL}/music/stream/${currentTrack.id ?? currentTrack.mediaId}`;
+      `${API_URL}/music/stream/${
+        currentTrack.id ??
+        currentTrack.mediaId
+      }`;
+
 
     audio.load();
 
+
     audio.play()
-      .catch((error: unknown) => {
+      .catch(
+        (error: unknown) => {
 
-        if (error instanceof DOMException) {
+          if (
+            error instanceof DOMException
+          ) {
 
-          if (error.name !== 'AbortError') {
-            console.error(error);
+            if (
+              error.name !==
+              'AbortError'
+            ) {
+
+              console.error(
+                error
+              );
+
+            }
+
+            return;
           }
 
-          return;
+
+          console.error(
+            error
+          );
+
         }
+      );
 
-        console.error(error);
 
-      });
-
+    /*
+     * Browser Media Session.
+     */
     if (
       'mediaSession' in navigator
     ) {
@@ -330,28 +595,37 @@ export default function AudioPlayer() {
 
           artwork: [
             {
+
               src:
                 currentTrack.poster,
+
               sizes:
                 '512x512',
+
               type:
                 'image/jpeg'
+
             }
           ]
 
         });
 
+
       navigator.mediaSession
         .setActionHandler(
           'play',
-          () => audio.play()
+          () =>
+            audio.play()
         );
+
 
       navigator.mediaSession
         .setActionHandler(
           'pause',
-          () => audio.pause()
+          () =>
+            audio.pause()
         );
+
 
       navigator.mediaSession
         .setActionHandler(
@@ -359,11 +633,13 @@ export default function AudioPlayer() {
           nextTrack
         );
 
+
       navigator.mediaSession
         .setActionHandler(
           'previoustrack',
           previousTrack
         );
+
 
       navigator.mediaSession
         .setActionHandler(
@@ -379,6 +655,7 @@ export default function AudioPlayer() {
           }
         );
 
+
       navigator.mediaSession
         .setActionHandler(
           'seekbackward',
@@ -392,42 +669,50 @@ export default function AudioPlayer() {
 
           }
         );
+
     }
 
-    const updatePosition = () => {
 
-      if (
-        'mediaSession' in navigator &&
-        navigator.mediaSession
-          .setPositionState
-      ) {
+    /*
+     * Update Media Session position.
+     */
+    const updatePosition =
+      () => {
 
-        try {
-
+        if (
+          'mediaSession' in navigator &&
           navigator.mediaSession
-            .setPositionState({
+            .setPositionState
+        ) {
 
-              duration:
-                audio.duration || 0,
+          try {
 
-              playbackRate:
-                audio.playbackRate,
+            navigator.mediaSession
+              .setPositionState({
 
-              position:
-                audio.currentTime
+                duration:
+                  audio.duration || 0,
 
-            });
+                playbackRate:
+                  audio.playbackRate,
 
-        } catch {}
+                position:
+                  audio.currentTime
 
-      }
+              });
 
-    };
+          } catch {}
+
+        }
+
+      };
+
 
     audio.addEventListener(
       'timeupdate',
       updatePosition
     );
+
 
     return () => {
 
@@ -443,16 +728,24 @@ export default function AudioPlayer() {
     currentTrack,
     nextTrack,
     previousTrack,
-    API_URL
+    API_URL,
+    audioRef
   ]);
 
+
+  /*
+   * Periodic history saving.
+   */
   useEffect(() => {
 
     if (!currentTrack) {
       return;
     }
 
-    if (historyInterval.current) {
+
+    if (
+      historyInterval.current
+    ) {
 
       clearInterval(
         historyInterval.current
@@ -460,55 +753,79 @@ export default function AudioPlayer() {
 
     }
 
-    lastSavedPosition.current = 0;
+
+    lastSavedPosition.current =
+      0;
+
 
     historyInterval.current =
-      setInterval(async () => {
+      setInterval(
+        async () => {
 
-        let seconds = 0;
+          let seconds = 0;
 
-        if (isNative) {
 
-          try {
+          /*
+           * Native position.
+           */
+          if (isNative) {
 
-            const status =
-              await MediaControls.getStatus();
+            try {
 
-            seconds =
-              Math.floor(
-                status.positionMs / 1000
-              );
+              const status =
+                await MediaControls.getStatus();
 
-          } catch {
+              seconds =
+                Math.floor(
+                  status.positionMs / 1000
+                );
 
-            return;
+            } catch {
+
+              return;
+
+            }
 
           }
 
-        } else {
+          /*
+           * Browser position.
+           */
+          else {
 
-          seconds =
-            Math.floor(
-              audioRef.current?.currentTime || 0
+            seconds =
+              Math.floor(
+                audioRef.current
+                  ?.currentTime || 0
+              );
+
+          }
+
+
+          /*
+           * Save every ~10 seconds.
+           */
+          if (
+            Math.abs(
+              seconds -
+              lastSavedPosition.current
+            ) >= 10
+          ) {
+
+            lastSavedPosition.current =
+              seconds;
+
+
+            await saveHistory(
+              false
             );
 
-        }
+          }
 
-        if (
-          Math.abs(
-            seconds -
-            lastSavedPosition.current
-          ) >= 10
-        ) {
+        },
+        10000
+      );
 
-          lastSavedPosition.current =
-            seconds;
-
-          saveHistory(false);
-
-        }
-
-      }, 10000);
 
     return () => {
 
@@ -522,202 +839,355 @@ export default function AudioPlayer() {
 
       }
 
-      saveHistory(false);
+
+      /*
+       * Save the latest position when
+       * the effect is cleaned up.
+       */
+      saveHistory(
+        false
+      );
 
     };
 
   }, [
     currentTrack,
-    isNative
+    isNative,
+    saveHistory,
+    audioRef
   ]);
 
-  if (!showPlayer || !currentTrack) {
-      return null;
-  }
 
-  
-
+  /*
+   * Play button.
+   */
   function handlePlay() {
 
     if (isNative) {
 
-      MediaControls.play()
-        .catch(console.error);
+      MediaControls
+        .play()
+        .catch(
+          console.error
+        );
 
     } else {
 
       audioRef.current
         ?.play()
-        .catch(console.error);
+        .catch(
+          console.error
+        );
 
     }
+
   }
 
+
+  /*
+   * Pause button.
+   */
   function handlePause() {
 
     if (isNative) {
 
-      MediaControls.pause()
-    .then(() => saveHistory(false))
-    .catch(console.error);
+      MediaControls
+        .pause()
+        .then(
+          () =>
+            saveHistory(false)
+        )
+        .catch(
+          console.error
+        );
 
     } else {
 
       audioRef.current?.pause();
+
       saveHistory(false);
 
     }
+
   }
 
+
+  /*
+   * Next button.
+   */
   async function handleNext() {
-     await saveHistory(
-        false,
-        currentTrack,
-        0
+
+    await saveHistory(
+      false,
+      currentTrack,
+      0
     );
+
 
     if (isNative) {
 
-      MediaControls.skipToNext()
-        .catch(console.error);
+      MediaControls
+        .skipToNext()
+        .catch(
+          console.error
+        );
 
     } else {
 
       nextTrack();
 
     }
+
   }
 
+
+  /*
+   * Previous button.
+   */
   async function handlePrevious() {
 
     await saveHistory(
-        false,
-        currentTrack,
-        0
+      false,
+      currentTrack,
+      0
     );
+
+
     if (isNative) {
 
-      MediaControls.skipToPrevious()
-        .catch(console.error);
+      MediaControls
+        .skipToPrevious()
+        .catch(
+          console.error
+        );
 
     } else {
 
       previousTrack();
 
     }
+
   }
+
+
+  /*
+   * Player hidden.
+   */
+  if (
+    !showPlayer ||
+    !currentTrack
+  ) {
+
+    return null;
+
+  }
+
 
   return (
 
     <div
-        className="
-            h-24
-            bg-zinc-950
-            border-t
-            border-zinc-800
-            flex
-            items-center
-            justify-between
-            px-6
-            shrink-0
-        "
+      className="
+        h-24
+        bg-zinc-950
+        border-t
+        border-zinc-800
+        flex
+        items-center
+        justify-between
+        px-6
+        shrink-0
+      "
     >
-      {/*LEFT  */}
-      <div className="flex items-center gap-4 min-w-0">
+
+      {/* LEFT */}
+
+      <div
+        className="
+          flex
+          items-center
+          gap-4
+          min-w-0
+        "
+      >
 
         <img
-            src={currentTrack.poster}
-            className="w-14 h-14 rounded-lg object-cover"
+          src={
+            currentTrack.poster
+          }
+          className="
+            w-14
+            h-14
+            rounded-lg
+            object-cover
+          "
         />
 
-        <div className="min-w-0">
 
-            <p className="font-semibold truncate">
-                {currentTrack.title}
-            </p>
+        <div
+          className="
+            min-w-0
+          "
+        >
 
-            <p className="text-sm text-zinc-400 truncate">
-                {currentTrack.artist}
-            </p>
+          <p
+            className="
+              font-semibold
+              truncate
+            "
+          >
+            {currentTrack.title}
+          </p>
+
+
+          <p
+            className="
+              text-sm
+              text-zinc-400
+              truncate
+            "
+          >
+            {currentTrack.artist}
+          </p>
 
         </div>
 
       </div>
-      {/*CENTER */}
 
-      <div className="flex justify-center">
 
-          {!isNative && (
+      {/* CENTER */}
 
-            <audio
-              ref={audioRef}
-              controls
-              preload="metadata"
-              crossOrigin="anonymous"
-              onPause={async () => {
+      <div
+        className="
+          flex
+          justify-center
+        "
+      >
+
+        {!isNative && (
+
+          <audio
+            ref={audioRef}
+            controls
+            preload="metadata"
+            crossOrigin="anonymous"
+
+            /*
+             * Browser pause.
+             *
+             * IMPORTANT:
+             * This does NOT create a new session.
+             */
+            onPause={
+              async () => {
+
                 await saveHistory(
-                    false,
-                    currentTrack,
-                    0
+                  false,
+                  currentTrack
                 );
-              }}
-              onEnded={async () => {
+
+              }
+            }
+
+
+            /*
+             * Browser track ended.
+             */
+            onEnded={
+              async () => {
 
                 console.log(
                   'TRACK ENDED',
                   currentTrack?.title
                 );
 
+
                 await saveHistory(
-                    true,
-                    currentTrack,
-                    0
+                  true,
+                  currentTrack,
+                  0
                 );
+
 
                 nextTrack();
 
-              }}
-            />
-          )}      
+              }
+            }
+
+          />
+
+        )}
+
       </div>
 
-      {/*RIGHT */}
+
+      {/* RIGHT */}
+
       <div
-          className="
-              flex
-              justify-end
-              items-center
-              gap-3
-          "
+        className="
+          flex
+          justify-end
+          items-center
+          gap-3
+        "
       >
 
-          <button onClick={handlePrevious}>⏮</button>
+        <button
+          onClick={
+            handlePrevious
+          }
+        >
+          ⏮
+        </button>
 
-          <button onClick={handlePlay}>▶</button>
 
-          <button onClick={handlePause}>⏸</button>
+        <button
+          onClick={
+            handlePlay
+          }
+        >
+          ▶
+        </button>
 
-          <button onClick={handleNext}>⏭</button>
 
-          <button
-              onClick={closePlayer}
-              className="
-                  w-9
-                  h-9
-                  rounded-full
-                  hover:bg-zinc-800
-                  transition
-                  text-lg
-              "
-          >
-              ✕
-          </button>
+        <button
+          onClick={
+            handlePause
+          }
+        >
+          ⏸
+        </button>
+
+
+        <button
+          onClick={
+            handleNext
+          }
+        >
+          ⏭
+        </button>
+
+
+        <button
+          onClick={
+            closePlayer
+          }
+          className="
+            w-9
+            h-9
+            rounded-full
+            hover:bg-zinc-800
+            transition
+            text-lg
+          "
+        >
+          ✕
+        </button>
 
       </div>
-
-      
 
     </div>
 
   );
+
 }
+
