@@ -129,36 +129,8 @@ export function parseXtreamCredentials(
   }
 }
 
-function serverCandidates(server: string): string[] {
-  const candidates = [server];
-
-  if (
-    typeof window !== 'undefined' &&
-    window.location.protocol === 'https:' &&
-    server.startsWith('http://')
-  ) {
-    const httpsServer = server.replace(/^http:/, 'https:');
-
-    if (!candidates.includes(httpsServer)) {
-      candidates.push(httpsServer);
-    }
-
-    try {
-      const parsed = new URL(server);
-
-      if (!parsed.port || parsed.port === '80') {
-        const secureAlternative = `https://${parsed.hostname}:8443`;
-
-        if (!candidates.includes(secureAlternative)) {
-          candidates.push(secureAlternative);
-        }
-      }
-    } catch {
-      // Ignore malformed hosts, the primary candidate will still fail.
-    }
-  }
-
-  return candidates;
+export function proxyUrl(url: string): string {
+  return `/api/iptv/proxy?url=${encodeURIComponent(url)}`;
 }
 
 export async function xtreamApi<T>(
@@ -166,47 +138,29 @@ export async function xtreamApi<T>(
   action: string,
   params: Record<string, string> = {}
 ): Promise<T> {
-  const candidates = serverCandidates(credentials.server);
+  const url = new URL(`${credentials.server}/player_api.php`);
 
-  let lastError: unknown = null;
+  url.searchParams.set('username', credentials.username);
+  url.searchParams.set('password', credentials.password);
+  url.searchParams.set('action', action);
 
-  for (const server of candidates) {
-    try {
-      const url = new URL(`${server}/player_api.php`);
-
-      url.searchParams.set('username', credentials.username);
-      url.searchParams.set('password', credentials.password);
-      url.searchParams.set('action', action);
-
-      Object.entries(params).forEach(([key, value]) => {
-        if (value) {
-          url.searchParams.set(key, value);
-        }
-      });
-
-      const response = await fetch(url.toString(), {
-        headers: {
-          Accept: 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Xtream request failed (${response.status})`);
-      }
-
-      const data = (await response.json()) as T;
-
-      credentials.server = server;
-
-      return data;
-    } catch (error) {
-      lastError = error;
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) {
+      url.searchParams.set(key, value);
     }
+  });
+
+  const response = await fetch(proxyUrl(url.toString()), {
+    headers: {
+      Accept: 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Xtream request failed (${response.status})`);
   }
 
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('Xtream request failed');
+  return (await response.json()) as T;
 }
 
 function encode(value: string): string {
@@ -217,9 +171,11 @@ export function xtreamLiveUrl(
   credentials: XtreamCredentials,
   streamId: number | string
 ): string {
-  return `${credentials.server}/live/${encode(credentials.username)}/${encode(
-    credentials.password
-  )}/${streamId}.m3u8`;
+  const upstream = `${credentials.server}/live/${encode(
+    credentials.username
+  )}/${encode(credentials.password)}/${streamId}.m3u8`;
+
+  return proxyUrl(upstream);
 }
 
 export function xtreamMovieUrl(
@@ -229,9 +185,11 @@ export function xtreamMovieUrl(
 ): string {
   const ext = cleanExtension(extension);
 
-  return `${credentials.server}/movie/${encode(credentials.username)}/${encode(
-    credentials.password
-  )}/${streamId}.${ext}`;
+  const upstream = `${credentials.server}/movie/${encode(
+    credentials.username
+  )}/${encode(credentials.password)}/${streamId}.${ext}`;
+
+  return proxyUrl(upstream);
 }
 
 export function xtreamSeriesUrl(
@@ -241,9 +199,11 @@ export function xtreamSeriesUrl(
 ): string {
   const ext = cleanExtension(extension);
 
-  return `${credentials.server}/series/${encode(credentials.username)}/${encode(
-    credentials.password
-  )}/${episodeId}.${ext}`;
+  const upstream = `${credentials.server}/series/${encode(
+    credentials.username
+  )}/${encode(credentials.password)}/${episodeId}.${ext}`;
+
+  return proxyUrl(upstream);
 }
 
 function cleanExtension(extension?: string | null): string {

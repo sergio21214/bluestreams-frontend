@@ -3,17 +3,11 @@
 import { useEffect, useState } from 'react';
 
 import {
-  authHeaders,
   parseM3u,
+  proxyUrl,
   type ActiveIptvAccount,
   type LegacyChannel
 } from '@/lib/iptv';
-
-type Provider = {
-  id: number;
-  name?: string | null;
-  url?: string | null;
-};
 
 export default function LegacyChannels({
   account,
@@ -27,14 +21,10 @@ export default function LegacyChannels({
     subtitle?: string
   ) => void;
 }) {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
   const [channels, setChannels] = useState<LegacyChannel[]>([]);
-  const [legacy, setLegacy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [startingId, setStartingId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,47 +34,7 @@ export default function LegacyChannels({
       setError('');
 
       try {
-        const providersResponse = await fetch(
-          `${API_URL}/iptv/providers`,
-          { headers: authHeaders() }
-        );
-
-        const providers = providersResponse.ok
-          ? ((await providersResponse.json()) as Provider[])
-          : [];
-
-        const match = providers.find(
-          (provider) =>
-            (provider.url &&
-              provider.url.replace(/\/+$/, '') ===
-                account.url.replace(/\/+$/, '')) ||
-            (provider.name &&
-              account.label &&
-              provider.name.toLowerCase() ===
-                account.label.toLowerCase())
-        );
-
-        if (match) {
-          const response = await fetch(`${API_URL}/iptv/${match.id}`, {
-            headers: authHeaders()
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-
-          const data = (await response.json()) as LegacyChannel[];
-
-          if (!cancelled) {
-            setChannels(data);
-            setLegacy(true);
-            setLoading(false);
-          }
-
-          return;
-        }
-
-        const response = await fetch(account.url);
+        const response = await fetch(proxyUrl(account.url));
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -95,16 +45,13 @@ export default function LegacyChannels({
 
         if (!cancelled) {
           setChannels(parsed);
-          setLegacy(false);
           setLoading(false);
         }
       } catch (err) {
-        console.error('Could not load playlist channels', err);
+        console.error('Could not load the M3U playlist', err);
 
         if (!cancelled) {
-          setError(
-            'Could not load this playlist. The provider may block browser requests.'
-          );
+          setError('Could not load this M3U playlist.');
           setLoading(false);
         }
       }
@@ -115,50 +62,19 @@ export default function LegacyChannels({
     return () => {
       cancelled = true;
     };
-  }, [API_URL, account.id, account.url, account.label]);
+  }, [account.url]);
 
-  async function play(channel: LegacyChannel) {
-    if (startingId !== null) {
+  function play(channel: LegacyChannel) {
+    if (!channel.streamUrl) {
       return;
     }
 
-    if (!legacy) {
-      if (!channel.streamUrl) {
-        return;
-      }
-
-      onPlay(
-        channel.streamUrl,
-        /\.m3u8(\?.*)?$/i.test(channel.streamUrl),
-        channel.name,
-        channel.groupName ?? undefined
-      );
-      return;
-    }
-
-    setStartingId(channel.id);
-
-    try {
-      const response = await fetch(
-        `${API_URL}/iptv/hls/start/${channel.id}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      onPlay(
-        `${API_URL}/iptv/hls/${channel.id}/playlist.m3u8`,
-        true,
-        channel.name,
-        channel.groupName ?? undefined
-      );
-    } catch (err) {
-      console.error('Could not start channel', err);
-      setError('Could not start this channel.');
-    } finally {
-      setStartingId(null);
-    }
+    onPlay(
+      proxyUrl(channel.streamUrl),
+      /\.m3u8(\?.*)?$/i.test(channel.streamUrl),
+      channel.name,
+      channel.groupName ?? undefined
+    );
   }
 
   const term = search.trim().toLowerCase();
@@ -276,7 +192,7 @@ export default function LegacyChannels({
               </span>
 
               <span className="shrink-0 text-xs text-blue-400">
-                {startingId === channel.id ? 'Starting...' : 'Watch'}
+                Watch
               </span>
 
             </button>
