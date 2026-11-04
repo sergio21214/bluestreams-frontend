@@ -239,7 +239,6 @@ export async function GET(request: Request): Promise<Response> {
 
     for (const name of [
       'content-type',
-      'content-length',
       'content-range',
       'accept-ranges',
       'last-modified',
