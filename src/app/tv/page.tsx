@@ -1,534 +1,380 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import Hls from 'hls.js';
+import { useEffect, useState } from 'react';
 
 import Navbar from '@/components/Navbar';
+import HlsPlayer from '@/components/tv/HlsPlayer';
+import LegacyChannels from '@/components/tv/LegacyChannels';
+import XtreamBrowser from '@/components/tv/XtreamBrowser';
+import {
+  accountTitle,
+  authHeaders,
+  isXtreamAccount,
+  type ActiveIptvAccount
+} from '@/lib/iptv';
+
+type Tab = 'live' | 'series' | 'movies';
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'live', label: 'Live TV' },
+  { id: 'series', label: 'Series' },
+  { id: 'movies', label: 'Movies' }
+];
+
+type PlayerState = {
+  src: string;
+  isHls: boolean;
+  title: string;
+  subtitle?: string;
+};
 
 export default function TVPage() {
-
-    const API_URL =
-        process.env.NEXT_PUBLIC_API_URL;
-
-    const videoRef =
-        useRef<HTMLVideoElement>(null);
-
-    const [providers, setProviders] =
-        useState<any[]>([]);
-
-    const [provider, setProvider] =
-        useState<number>(0);
-
-    const [groups, setGroups] =
-        useState<string[]>([]);
-
-    const [groupFilter, setGroupFilter] =
-        useState<string>('');
-
-    const [groupsLoading, setGroupsLoading] =
-        useState(false);
-
-    const [channels, setChannels] =
-        useState<any[]>([]);
-
-    const [selected, setSelected] =
-        useState<any>(null);
-
-    const [search, setSearch] =
-        useState('');
-
-    const [loading, setLoading] =
-        useState(false);
-
-    const getLogo = (logo?: string) => {
-
-        if (!logo)
-            return '/tv-placeholder.png';
-
-        if (
-            logo.startsWith('http://') ||
-            logo.startsWith('https://')
-        )
-            return logo;
-
-        return '/tv-placeholder.png';
-
-    };
-
-    // Direct media files (no HLS manifest) need Shaka Player instead of hls.js
-    const isDirectFile = (url?: string) => {
-
-        if (!url)
-            return false;
-
-        return /\.(mkv|mp4|avi)(\?.*)?$/i.test(url.trim());
-
-    };
-
-    // Search only narrows within the currently loaded (single-group) channel
-    // list, so this stays cheap even for huge providers.
-    const filtered = search.trim() === ''
-        ? channels
-        : channels.filter(channel => {
-
-            const name =
-                (channel.name ?? "").trim().toLowerCase();
-
-            return name.includes(search.trim().toLowerCase());
-
-        });
-
-    /* Load IPTV providers */
-
-    useEffect(() => {
-
-        fetch(`${API_URL}/iptv/providers`)
-            .then(r => r.json())
-            .then(data => {
-
-                setProviders(data);
-
-                if (data.length > 0) {
-
-                    setProvider(data[0].id);
-
-                }
-
-            });
-
-    }, []);
-
-    /* Load groups for the selected provider, preselect the first one.
-       This is a cheap "distinct group names" query — it never touches the
-       95k-row channel table directly. */
-
-    useEffect(() => {
-
-        if (!provider)
-            return;
-
-        setGroupsLoading(true);
-        setGroups([]);
-        setGroupFilter('');
-        setChannels([]);
-        setSelected(null);
-
-        fetch(`${API_URL}/iptv/${provider}/groups`)
-            .then(r => r.json())
-            .then((data: string[]) => {
-
-                setGroups(data);
-
-                if (data.length > 0) {
-
-                    setGroupFilter(data[0]);
-
-                }
-
-            })
-            .finally(() => setGroupsLoading(false));
-
-    }, [provider]);
-
-    /* Load channels for provider + selected group only.
-       Never fetches the full 95k-row list unless the user explicitly
-       picks "All". */
-
-    useEffect(() => {
-
-        if (!provider || !groupFilter)
-            return;
-
-        setLoading(true);
-
-        fetch(`${API_URL}/iptv/${provider}?group=${encodeURIComponent(groupFilter)}`)
-            .then(r => r.json())
-            .then(data => {
-
-                const proxied = data.map((channel: any) => ({
-
-                    ...channel,
-
-                    streamUrl:
-                        `${API_URL}/iptv/proxy/${channel.id}`
-
-                }));
-
-                setChannels(proxied);
-
-                if (proxied.length > 0) {
-
-                    setSelected(proxied[0]);
-
-                } else {
-
-                    setSelected(null);
-
-                }
-
-            })
-            .finally(() => setLoading(false));
-
-    }, [provider, groupFilter]);
-
-    
-    /* PLAYER */
-    useEffect(() => {
-
-        if (!selected)
-            return;
-
-        const video = videoRef.current;
-
-        if (video == null)
-            return;
-
-        const videoElement: HTMLVideoElement = video;
-
-        let hls: Hls | null = null;
-        let cancelled = false;
-
-        async function startPlayer() {
-
-            try {
-
-                videoElement.pause();
-                videoElement.removeAttribute("src");
-                videoElement.load();
-
-                // Tell Quarkus to start FFmpeg
-                await fetch(
-                    `${API_URL}/iptv/hls/start/${selected.id}`
-                );
-
-                // Give FFmpeg a few seconds to create the playlist
-                await new Promise(resolve =>
-                    setTimeout(resolve, 3000)
-                );
-
-                if (cancelled)
-                    return;
-
-                const playlistUrl =
-                    `${API_URL}/iptv/hls/${selected.id}/playlist.m3u8`;
-
-                console.log("Loading:", playlistUrl);
-
-                if (Hls.isSupported()) {
-
-                    hls = new Hls({
-
-                        enableWorker: true,
-
-                        lowLatencyMode: true
-
-                    });
-
-                    hls.loadSource(playlistUrl);
-
-                    hls.attachMedia(videoElement);
-
-                    hls.on(
-                        Hls.Events.MANIFEST_PARSED,
-                        () => {
-
-                            console.log("Manifest loaded");
-
-                            videoElement.play().catch(console.error);
-
-                        }
-                    );
-
-                    hls.on(Hls.Events.ERROR, (_, data) => {
-
-                        console.log("HLS ERROR");
-
-                        console.log("type:", data.type);
-
-                        console.log("details:", data.details);
-
-                        console.log("fatal:", data.fatal);
-
-                        console.log(data);
-
-                    });
-
-                }
-                else if (
-                    videoElement.canPlayType(
-                        "application/vnd.apple.mpegurl"
-                    )
-                ) {
-
-                    videoElement.src = playlistUrl;
-
-                    videoElement.play().catch(console.error);
-
-                }
-                else {
-
-                    console.error("HLS not supported");
-
-                }
-
-            }
-            catch (e) {
-
-                console.error(e);
-
-            }
-
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  const [accounts, setAccounts] = useState<ActiveIptvAccount[]>([]);
+  const [selected, setSelected] = useState<ActiveIptvAccount | null>(null);
+  const [tab, setTab] = useState<Tab>('live');
+  const [player, setPlayer] = useState<PlayerState | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [accountsResponse, providersResponse] = await Promise.all([
+          fetch(`${API_URL}/iptv/accounts/active`, {
+            headers: authHeaders()
+          }),
+          fetch(`${API_URL}/iptv/providers`, {
+            headers: authHeaders()
+          })
+        ]);
+
+        if (!accountsResponse.ok) {
+          throw new Error(`HTTP ${accountsResponse.status}`);
         }
 
-        startPlayer();
-
-        return () => {
-
-            cancelled = true;
-
-            if (hls) {
-
-                hls.destroy();
-
-            }
-
-            videoElement.pause();
-
-            videoElement.removeAttribute("src");
-
-            videoElement.load();
-
-        };
-
-    }, [selected, API_URL]);
-
-    return (
-
-        <main className="bg-[#050b18] text-white min-h-screen">
-
-            <Navbar />
-
-            <div className="pt-24 px-8">
-
-                <div className="flex justify-between items-center mb-8">
-
-                    <h1 className="text-5xl font-bold">
-                        Live TV
-                    </h1>
-
-                    <div className="flex gap-3">
-
-                        <select
-                            value={provider}
-                            onChange={(e) => setProvider(Number(e.target.value))}
-                            className="bg-zinc-900 rounded-xl px-4 py-3"
-                        >
-                            {providers.map((p) => (
-                                <option
-                                    key={p.id}
-                                    value={p.id}
-                                >
-                                    {p.name}
-                                </option>
-                            ))}
-                        </select>
-
-                        <select
-                            value={groupFilter}
-                            onChange={(e) => setGroupFilter(e.target.value)}
-                            disabled={groupsLoading || groups.length === 0}
-                            className="bg-zinc-900 rounded-xl px-4 py-3"
-                        >
-                            {groups.map(group => (
-                                <option
-                                    key={group}
-                                    value={group}
-                                >
-                                    {group}
-                                </option>
-                            ))}
-                        </select>
-
-                    </div>
-
-                </div>
-
-                <div className="flex flex-col gap-8 lg:flex-row">
-
-                    {/* LEFT */}
-
-                    <div className="w-full lg:w-[420px]">
-
-                        <input
-
-                            value={search}
-
-                            onChange={(e) =>
-                                setSearch(
-                                    e.target.value
-                                )
-                            }
-
-                            placeholder="Search channel in this group..."
-
-                            className="
-                                w-full
-                                bg-zinc-900
-                                rounded-xl
-                                p-3
-                                mb-5
-                            "
-
-                        />
-
-                        <p className="text-zinc-400 mb-2">
-                            Showing {filtered.length} channels in "{groupFilter || '...'}"
-                        </p>
-
-                        <div className="h-[50vh] overflow-y-auto lg:h-[78vh]">
-                             {loading || groupsLoading ? (
-
-                                <div className="flex justify-center items-center h-full">
-
-                                    <div
-                                        className="
-                                            w-10
-                                            h-10
-                                            border-4
-                                            border-zinc-600
-                                            border-t-blue-500
-                                            rounded-full
-                                            animate-spin
-                                        "
-                                    />
-
-                                </div>
-
-                                ) : (
-                                    <div className="space-y-2">
-                                        {filtered.map(channel => (
-
-                                            <button
-
-                                                key={`${channel.id}-${channel.name}`}
-
-                                                onClick={() =>
-                                                    setSelected(channel)
-                                                }
-
-                                                className={`
-                                                    w-full
-                                                    flex
-                                                    items-center
-                                                    gap-3
-                                                    p-2
-                                                    rounded-xl
-                                                    transition
-                                                    ${
-                                                        selected?.streamUrl === channel.streamUrl
-                                                        ? 'bg-blue-600'
-                                                        : 'bg-zinc-900 hover:bg-zinc-800'
-                                                    }
-                                                `}
-
-                                            >
-
-                                                <img
-
-                                                    src={
-                                                        getLogo(channel.logo)
-                                                    }
-
-                                                    className="
-                                                        w-10
-                                                        h-10
-                                                        object-contain
-                                                        rounded
-                                                        bg-white
-                                                        p-1
-                                                    "
-
-                                                    onError={(e) => {
-                                                        const img = e.currentTarget;
-
-                                                        // prevent infinite loop
-                                                        img.onerror = null;
-
-                                                        img.src = "/tv-placeholder.png";
-                                                    }}
-
-                                                />
-
-                                                <div className="text-left flex-1">
-
-                                                    <div className="font-semibold">
-
-                                                        {channel.name}
-
-                                                    </div>
-
-                                                    <div className="text-xs text-zinc-400">
-
-                                                        {channel.groupName}
-
-                                                    </div>
-
-                                                </div>
-
-                                            </button>
-
-                                        ))}
-                                    </div>
-                                    )}
-                        </div>
-
-                    </div>
-
-                    {/* PLAYER */}
-
-                    <div className="flex-1">
-
-                        {selected && (
-
-                            <>
-
-                                <h2 className="text-3xl font-bold">
-
-                                    {selected.name}
-
-                                </h2>
-
-                                <p className="text-zinc-400 mb-5">
-
-                                    {selected.groupName}
-
-                                </p>
-
-                                <video
-                                    ref={videoRef}
-                                    controls
-                                    autoPlay
-                                    playsInline
-                                    muted={false}
-                                    className="
-                                        w-full
-                                        rounded-2xl
-                                        bg-black
-                                    "
-                                />
-
-                            </>
-
+        const activeAccounts =
+          (await accountsResponse.json()) as ActiveIptvAccount[];
+
+        const providers = providersResponse.ok
+          ? ((await providersResponse.json()) as {
+              id: number;
+              name?: string | null;
+              url?: string | null;
+            }[])
+          : [];
+
+        const list = Array.isArray(activeAccounts)
+          ? [...activeAccounts]
+          : [];
+
+        const knownUrls = new Set(
+          list.map((account) => account.url.replace(/\/+$/, ''))
+        );
+
+        providers.forEach((provider) => {
+          if (!provider.url || !/\.m3u$/i.test(provider.url)) {
+            return;
+          }
+
+          const key = provider.url.replace(/\/+$/, '');
+
+          if (knownUrls.has(key)) {
+            return;
+          }
+
+          knownUrls.add(key);
+
+          list.push({
+            id: -provider.id,
+            label: provider.name ?? 'IPTV',
+            type: 'M3U',
+            url: provider.url,
+            isDefault: false
+          });
+        });
+
+        if (!cancelled) {
+          setAccounts(list);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Could not load IPTV accounts', err);
+
+        if (!cancelled) {
+          setError('Could not load your active IPTV accounts.');
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [API_URL]);
+
+  function selectAccount(account: ActiveIptvAccount) {
+    setSelected(account);
+    setTab('live');
+    setPlayer(null);
+  }
+
+  function play(
+    src: string,
+    isHls: boolean,
+    title: string,
+    subtitle?: string
+  ) {
+    setPlayer({ src, isHls, title, subtitle });
+  }
+
+  return (
+    <>
+      <Navbar />
+
+      <main className="min-h-screen bg-[#050b18] px-4 pb-16 pt-24 text-white sm:px-6 lg:px-10">
+
+        {!selected ? (
+          <>
+            <header className="mb-8">
+
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-400/80">
+                Live TV
+              </p>
+
+              <h1 className="mt-2 text-3xl font-bold sm:text-4xl">
+                Choose a provider
+              </h1>
+
+              <p className="mt-2 max-w-2xl text-sm text-zinc-400">
+                Active IPTV accounts available for your profile.
+              </p>
+
+            </header>
+
+            {loading ? (
+              <div className="flex justify-center py-24">
+                <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-500/20 border-t-blue-500" />
+              </div>
+            ) : error ? (
+              <p className="rounded-2xl border border-red-500/20 bg-red-500/10 px-6 py-5 text-sm text-red-300">
+                {error}
+              </p>
+            ) : accounts.length === 0 ? (
+              <p className="rounded-2xl border border-white/5 bg-white/[0.02] px-6 py-16 text-center text-sm text-zinc-500">
+                No active IPTV accounts. Add one from the admin panel.
+              </p>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+
+                {accounts.map((account) => (
+                  <button
+                    type="button"
+                    key={`${account.id}-${account.url}`}
+                    onClick={() => selectAccount(account)}
+                    className="
+                      group
+                      flex
+                      items-center
+                      gap-4
+                      rounded-2xl
+                      border
+                      border-white/5
+                      bg-gradient-to-br
+                      from-white/[0.06]
+                      to-white/[0.02]
+                      p-5
+                      text-left
+                      transition
+                      hover:border-blue-500/40
+                      hover:from-blue-600/20
+                      hover:to-blue-900/10
+                    "
+                  >
+
+                    <span
+                      className="
+                        flex
+                        h-14
+                        w-14
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-2xl
+                        bg-gradient-to-br
+                        from-blue-500
+                        to-blue-700
+                        text-xl
+                        font-bold
+                        shadow-lg
+                        shadow-blue-900/40
+                      "
+                    >
+                      {isXtreamAccount(account) ? 'X' : 'TV'}
+                    </span>
+
+                    <span className="min-w-0 flex-1">
+
+                      <span className="flex items-center gap-2">
+
+                        <span className="truncate text-lg font-bold">
+                          {accountTitle(account)}
+                        </span>
+
+                        {account.isDefault && (
+                          <span className="shrink-0 rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-300">
+                            Default
+                          </span>
                         )}
 
-                    </div>
+                      </span>
 
+                      <span className="mt-1 block truncate text-xs text-zinc-400">
+                        {isXtreamAccount(account)
+                          ? 'Live TV • Series • Movies'
+                          : 'Live channels'}
+                      </span>
+
+                      {account.label && isXtreamAccount(account) && (
+                        <span className="mt-1 block truncate text-[11px] text-zinc-500">
+                          {account.label}
+                        </span>
+                      )}
+
+                    </span>
+
+                    <span className="shrink-0 text-2xl text-zinc-600 transition group-hover:text-blue-400">
+                      →
+                    </span>
+
+                  </button>
+                ))}
+
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+
+              <div className="flex items-center gap-3">
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelected(null);
+                    setPlayer(null);
+                  }}
+                  className="
+                    flex
+                    h-10
+                    w-10
+                    items-center
+                    justify-center
+                    rounded-full
+                    border
+                    border-white/10
+                    bg-white/5
+                    text-zinc-300
+                    transition
+                    hover:bg-white/10
+                    hover:text-white
+                  "
+                  aria-label="Back to providers"
+                >
+                  ←
+                </button>
+
+                <div>
+                  <h1 className="text-2xl font-bold">
+                    {accountTitle(selected)}
+                  </h1>
+
+                  <p className="text-xs text-zinc-400">
+                    {isXtreamAccount(selected)
+                      ? 'Xtream account'
+                      : 'Live TV playlist'}
+                    {selected.label ? ` • ${selected.label}` : ''}
+                  </p>
                 </div>
+
+              </div>
 
             </div>
 
-        </main>
+            {isXtreamAccount(selected) && (
+              <div className="mb-6 flex gap-2">
 
-    );
+                {TABS.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    onClick={() => {
+                      setTab(item.id);
+                      setPlayer(null);
+                    }}
+                    className={`
+                      rounded-full
+                      px-5
+                      py-2
+                      text-sm
+                      font-semibold
+                      transition
+                      ${
+                        tab === item.id
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
+                      }
+                    `}
+                  >
+                    {item.label}
+                  </button>
+                ))}
 
+              </div>
+            )}
+
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_440px]">
+
+              <section className="min-w-0">
+
+                {isXtreamAccount(selected) ? (
+                  <XtreamBrowser
+                    account={selected}
+                    tab={tab}
+                    onPlay={play}
+                  />
+                ) : (
+                  <LegacyChannels
+                    account={selected}
+                    onPlay={play}
+                  />
+                )}
+
+              </section>
+
+              <aside className="self-start lg:sticky lg:top-24">
+
+                <HlsPlayer
+                  src={player?.src ?? null}
+                  isHls={player?.isHls ?? false}
+                  title={player?.title}
+                  subtitle={player?.subtitle}
+                />
+
+              </aside>
+
+            </div>
+          </>
+        )}
+
+      </main>
+    </>
+  );
 }
