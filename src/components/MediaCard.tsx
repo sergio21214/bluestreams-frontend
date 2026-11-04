@@ -1,291 +1,181 @@
 'use client';
 
-import {
-  useRef,
-  useState
-} from 'react';
+import Link from 'next/link';
+import { useState } from 'react';
+
+import { getProgressPercent } from '@/lib/progress';
+import type { MediaItem } from '@/lib/types';
+
+import VideoPreview from './VideoPreview';
 
 export default function MediaCard({
   item
 }: {
-  item: any;
+  item: MediaItem;
 }) {
-
-  const [hovered, setHovered] =
-    useState(false);
-
-  const videoRef =
-    useRef<HTMLVideoElement | null>(
-      null
-    );
+  const [hovered, setHovered] = useState(false);
+  const [progress] = useState(() => getProgressPercent(item.id));
 
   const poster =
-    item.poster &&
-    item.poster !== 'N/A'
+    item.poster && item.poster !== 'N/A'
       ? item.poster
       : item.thumbnailUrl;
 
-  // PROGRESS
-
-  const progressRaw =
-    typeof window !== 'undefined'
-      ? localStorage.getItem(
-          `progress-${item.id}`
-        )
-      : null;
-
-  let progressPercent = 0;
-
-  if (progressRaw) {
-
-    try {
-
-      const parsed =
-        JSON.parse(progressRaw);
-
-      progressPercent =
-        (
-          parsed.currentTime /
-          parsed.duration
-        ) * 100;
-
-    } catch {}
-
-  }
+  const preview = item.previewUrl || item.manifestUrl;
 
   return (
-
     <div
       className="
+        group
         relative
-        min-w-[260px]
-        w-[260px]
-        transition-all
+        w-[240px]
+        min-w-[240px]
+        transition
         duration-300
-        hover:z-50
+        hover:z-30
       "
-      onMouseEnter={() => {
-
-        setHovered(true);
-
-        setTimeout(() => {
-
-          if (
-            videoRef.current
-          ) {
-
-            videoRef.current.play()
-              .catch(() => {});
-
-          }
-
-        }, 500);
-
-      }}
-      onMouseLeave={() => {
-
-        setHovered(false);
-
-        if (
-          videoRef.current
-        ) {
-
-          videoRef.current.pause();
-
-          videoRef.current.currentTime = 0;
-
-        }
-
-      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
 
       <div
-        className={`
-          bg-zinc-900
-          rounded-2xl
+        className="
           overflow-hidden
-          shadow-2xl
-          transition-all
+          rounded-2xl
+          border
+          border-white/5
+          bg-white/[0.03]
+          shadow-xl
+          shadow-black/30
+          transition
           duration-300
-          ${
-            hovered
-              ? 'scale-110'
-              : 'scale-100'
-          }
-        `}
+          group-hover:scale-[1.04]
+          group-hover:border-blue-500/30
+        "
       >
 
-        {/* IMAGE / VIDEO */}
+        <Link
+          href={`/title/${item.id}`}
+          className="relative block h-[150px] bg-black"
+        >
 
-        <a href={`/title/${item.id}`}>
-
-          <div className="
-            relative
-            h-[150px]
-            bg-black
-          ">
-
-            {!hovered && (
-
+          {!hovered || !preview ? (
+            poster && poster !== 'N/A' ? (
               <img
                 src={poster}
-                alt={item.title}
-                className="
-                  w-full
-                  h-full
-                  object-cover
-                "
+                alt={item.title ?? 'Media'}
+                className="h-full w-full object-cover"
               />
-
-            )}
-
-            {hovered && (
-
-              <video
-                ref={videoRef}
-                muted
-                loop
-                playsInline
-                className="
-                  w-full
-                  h-full
-                  object-cover
-                "
-              >
-
-                <source
-                  src={
-                    item.previewUrl ||
-                    item.manifestUrl
-                  }
-                />
-
-              </video>
-
-            )}
-
-          </div>
-
-        </a>
-
-        {/* PROGRESS BAR */}
-
-        {progressPercent > 0 && (
-
-          <div className="
-            h-1
-            bg-zinc-800
-            w-full
-          ">
-
-            <div
-              className="
-                h-full
-                bg-blue-600 hover:bg-blue-500
-              "
-              style={{
-                width:
-                  `${progressPercent}%`
-              }}
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-900/50 to-slate-900 text-3xl text-blue-300/50">
+                ▶
+              </div>
+            )
+          ) : (
+            <VideoPreview
+              src={preview}
+              className="h-full w-full object-cover"
             />
+          )}
 
+          <div
+            className="
+              pointer-events-none
+              absolute
+              inset-0
+              bg-gradient-to-t
+              from-black/60
+              via-transparent
+              to-transparent
+              opacity-0
+              transition
+              group-hover:opacity-100
+            "
+          />
+
+        </Link>
+
+        {progress > 0 && progress < 100 && (
+          <div className="h-1 w-full bg-white/10">
+            <div
+              className="h-full bg-blue-500"
+              style={{ width: `${progress}%` }}
+            />
           </div>
-
         )}
-
-        {/* INFO */}
 
         <div className="p-4">
 
-          <a href={`/title/${item.id}`}>
+          <Link href={`/title/${item.id}`}>
 
-            <h3 className="
-              font-bold
-              text-base
-              line-clamp-1
-              hover:text-red-500
-            ">
-              {item.title}
+            <h3 className="truncate text-base font-bold text-white transition hover:text-blue-400">
+              {item.title ?? item.name ?? 'Untitled'}
             </h3>
 
-          </a>
+          </Link>
 
-          <div className="
-            flex
-            items-center
-            gap-2
-            mt-2
-            text-sm
-            text-zinc-400
-          ">
+          <div className="mt-2 flex items-center gap-2 text-sm text-zinc-400">
 
-            {item.year && (
-
-              <span>
-                {item.year}
-              </span>
-
-            )}
+            {item.year && <span>{item.year}</span>}
 
             {item.genre && (
-
               <>
-
                 <span>•</span>
-
-                <span className="
-                  line-clamp-1
-                ">
-                  {item.genre}
-                </span>
-
+                <span className="truncate">{item.genre}</span>
               </>
-
             )}
 
           </div>
 
-          {hovered && (
-
-            <div className="
+          <div
+            className={`
+              mt-4
               flex
               gap-2
-              mt-4
-            ">
+              transition
+              ${
+                hovered
+                  ? 'translate-y-0 opacity-100'
+                  : 'pointer-events-none translate-y-1 opacity-0'
+              }
+            `}
+          >
 
-              <a
-                href={`/watch/${item.id}`}
-                className="
-                  bg-white
-                  text-black
-                  px-4
-                  py-2
-                  rounded-lg
-                  font-semibold
-                  text-sm
-                  hover:bg-zinc-300
-                "
-              >
-                ▶ Play
-              </a>
+            <Link
+              href={`/watch/${item.id}`}
+              className="
+                rounded-lg
+                bg-blue-600
+                px-4
+                py-2
+                text-sm
+                font-semibold
+                text-white
+                transition
+                hover:bg-blue-500
+              "
+            >
+              ▶ Play
+            </Link>
 
-              <a
-                href={`/title/${item.id}`}
-                className="
-                  bg-zinc-700
-                  px-4
-                  py-2
-                  rounded-lg
-                  text-sm
-                  hover:bg-zinc-600
-                "
-              >
-                Details
-              </a>
+            <Link
+              href={`/title/${item.id}`}
+              className="
+                rounded-lg
+                bg-white/10
+                px-4
+                py-2
+                text-sm
+                font-semibold
+                text-white
+                transition
+                hover:bg-white/20
+              "
+            >
+              Details
+            </Link>
 
-            </div>
-
-          )}
+          </div>
 
         </div>
 

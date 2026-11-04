@@ -2,43 +2,57 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { hasAnyCredential } from '@/app/lib/auth';
+
+import {
+  clearSession,
+  getToken,
+  hasAnyCredential
+} from '@/lib/auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const PUBLIC_ROUTES = ['/login', '/register'];
 
 export default function SessionHeartbeat() {
-    const pathname = usePathname();
+  const pathname = usePathname();
 
-    useEffect(() => {
-        if (PUBLIC_ROUTES.includes(pathname)) return;
-        if (!hasAnyCredential()) return; // nothing to check, avoid a guaranteed 401
+  useEffect(() => {
+    if (PUBLIC_ROUTES.includes(pathname)) {
+      return;
+    }
 
-        async function heartbeat() {
-            try {
-                const token = localStorage.getItem("token");
-                const response = await fetch(`${API_URL}/auth/check`, {
-                    credentials: 'include',
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                });
+    if (!hasAnyCredential()) {
+      return;
+    }
 
-                if (response.status === 401) {
-                    localStorage.clear();
-                    if (window.location.pathname !== '/login') {
-                        window.location.href = '/login';
-                    }
-                }
-            } catch (err) {
-                console.error('Heartbeat failed', err);
-            }
+    async function heartbeat() {
+      try {
+        const token = getToken();
+
+        const response = await fetch(`${API_URL}/auth/check`, {
+          credentials: 'include',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (response.status === 401) {
+          clearSession();
+
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
         }
+      } catch (error) {
+        console.error('Heartbeat failed', error);
+      }
+    }
 
-        heartbeat();
-        const timer = setInterval(heartbeat, 20 * 60 * 1000);
-        return () => clearInterval(timer);
-    }, [pathname]);
+    heartbeat();
 
-    return null;
+    const timer = setInterval(heartbeat, 20 * 60 * 1000);
+
+    return () => clearInterval(timer);
+  }, [pathname]);
+
+  return null;
 }

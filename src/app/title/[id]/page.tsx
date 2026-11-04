@@ -56,7 +56,7 @@ export default function TitlePage() {
 
       <main className="
         min-h-screen
-        bg-black
+        bg-[#050b18]
         text-white
         flex
         items-center
@@ -77,7 +77,7 @@ export default function TitlePage() {
 
     <main className="
       min-h-screen
-      bg-black
+      bg-[#050b18]
       text-white
     ">
 

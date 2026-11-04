@@ -1,129 +1,27 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import Navbar from '@/components/Navbar';
-import { useAudioPlayer } from '@/app/context/AudioPlayerContext';
+import CollectionPage from '@/components/music/CollectionPage';
 
 export default function TopPage() {
-
-    const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
-    const { playTrack } = useAudioPlayer();
-
-    const [tracks, setTracks] = useState<any[]>([]);
-
-    useEffect(() => {
-
-        const token = localStorage.getItem('token');
-        const profileId = localStorage.getItem('profileId');
-
-        console.log('tracks', tracks);
-        
-        fetch(`${API_URL}/music/history/top`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'X-Profile-Id': profileId!
-            }
-        })
-        .then(r => r.json())
-        .then(data => {
-
-            const normalized = data.map((track: any) => ({
-                ...track,
-                id: track.mediaId
-            }));
-
-            console.log(normalized);
-
-            setTracks(normalized);
-
-        });
-
-    }, []);
-
-    return (
-
-        <main className="bg-black text-white min-h-screen">
-
-            <Navbar />
-
-            <div className="pt-28 px-8">
-
-                <div className="flex items-center justify-between mb-8">
-
-                    <div>
-
-                        <h1 className="text-5xl font-bold">
-                            Most Played
-                        </h1>
-
-                        <p className="text-zinc-400 mt-2">
-                            {tracks.length} songs
-                        </p>
-
-                    </div>
-
-                    <button
-                        onClick={() =>
-                            tracks.length &&
-                            playTrack(tracks[0], tracks)
-                        }
-                        className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-xl font-semibold"
-                    >
-                        ▶ Play Playlist
-                    </button>
-
-                </div>
-
-                <div className="space-y-2">
-
-                    {tracks.map((track, index) => (
-
-                        <button
-                            key={track.mediaId}
-                           onClick={() => {
-                                console.log("CLICK");
-                                console.log(track);
-
-                                playTrack(track, tracks);
-                            }}
-                            className="w-full flex items-center gap-4 bg-zinc-900 hover:bg-zinc-800 rounded-xl p-3 transition"
-                        >
-
-                            <div className="w-8 text-zinc-500">
-                                {index + 1}
-                            </div>
-
-                            <img
-                                src={track.poster}
-                                className="w-14 h-14 rounded-lg object-cover"
-                            />
-
-                            <div className="flex-1 text-left">
-
-                                <div className="font-semibold">
-                                    {track.title}
-                                </div>
-
-                                <div className="text-sm text-zinc-400">
-                                    {track.artist}
-                                </div>
-
-                            </div>
-
-                            <div className="text-sm text-zinc-500">
-                                {track.playCount} plays
-                            </div>
-
-                        </button>
-
-                    ))}
-
-                </div>
-
-            </div>
-
-        </main>
-
-    );
+  return (
+    <CollectionPage
+      title="Most Played"
+      subtitle="Your all-time favourites, ordered by the number of plays."
+      endpoint="/music/history/top"
+      gradient="from-indigo-500 via-blue-700 to-[#050b18]"
+      showPlayCount
+      emptyText="Your most played songs will appear here once you start listening."
+      icon={
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-12 w-12"
+        >
+          <path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.8 6.2 20.9l1.1-6.5L2.6 9.8l6.5-.9L12 3z" />
+        </svg>
+      }
+    />
+  );
 }

@@ -304,7 +304,7 @@ export default function TVPage() {
 
     return (
 
-        <main className="bg-black text-white min-h-screen">
+        <main className="bg-[#050b18] text-white min-h-screen">
 
             <Navbar />
 
@@ -353,11 +353,11 @@ export default function TVPage() {
 
                 </div>
 
-                <div className="flex gap-8">
+                <div className="flex flex-col gap-8 lg:flex-row">
 
                     {/* LEFT */}
 
-                    <div className="w-[420px]">
+                    <div className="w-full lg:w-[420px]">
 
                         <input
 
@@ -385,7 +385,7 @@ export default function TVPage() {
                             Showing {filtered.length} channels in "{groupFilter || '...'}"
                         </p>
 
-                        <div className="h-[78vh] overflow-y-auto">
+                        <div className="h-[50vh] overflow-y-auto lg:h-[78vh]">
                              {loading || groupsLoading ? (
 
                                 <div className="flex justify-center items-center h-full">

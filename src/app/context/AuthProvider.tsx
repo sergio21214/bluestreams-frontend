@@ -2,135 +2,144 @@
 
 import { useEffect } from 'react';
 
+import { clearSession, getToken, setToken } from '@/lib/auth';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+const MEDIA_URL = process.env.NEXT_PUBLIC_MEDIA_URL ?? '';
+
+const AUTH_PATHS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh'
+];
+
+function resolveUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  if (input instanceof URL) {
+    return input.toString();
+  }
+
+  return input.url;
+}
+
+function isAuthPath(url: string): boolean {
+  return AUTH_PATHS.some((path) => url.includes(path));
+}
+
 export default function AuthProvider({
-    children,
+  children
 }: {
-    children: React.ReactNode;
+  children: React.ReactNode;
 }) {
+  useEffect(() => {
+    const originalFetch = window.fetch.bind(window);
 
-    useEffect(() => {
+    let refreshInFlight: Promise<string | null> | null = null;
 
-        const originalFetch = window.fetch;
+    async function refreshToken(): Promise<string | null> {
+      if (refreshInFlight) {
+        return refreshInFlight;
+      }
 
-        window.fetch = async (
-            input: RequestInfo | URL,
-            init?: RequestInit
-        ) => {
-
-            const token =
-                localStorage.getItem("token");
-
-            const headers =
-                new Headers(init?.headers);
-
-            const url =
-                typeof input === "string"
-                    ? input
-                    : input instanceof URL
-                        ? input.toString()
-                        : input.url;
-
-            const isApi =
-                url.startsWith(process.env.NEXT_PUBLIC_API_URL!);
-
-            const isMedia =
-                url.startsWith(process.env.NEXT_PUBLIC_MEDIA_URL!);
-
-            if (token && isApi && !isMedia) {
-
-                const url =
-                    typeof input === "string"
-                        ? input
-                        : input.toString();
-
-                if (
-                    token &&
-                    url.startsWith(process.env.NEXT_PUBLIC_API_URL!)
-                ) {
-                    headers.set(
-                        "Authorization",
-                        `Bearer ${token}`
-                    );
-                }
-
+      refreshInFlight = (async () => {
+        try {
+          const response = await originalFetch(
+            `${API_URL}/auth/refresh`,
+            {
+              method: 'POST',
+              credentials: 'include'
             }
+          );
 
-            let response =
-                await originalFetch(input, {
-                    ...init,
-                    headers
-                });
+          if (!response.ok) {
+            return null;
+          }
 
-            // if (
-            //     response.status !== 401
-            // ) {
-            //     if (!isApi) {
-            //         return response;
-            //     }
-            // }
-            if (response.status !== 401) {
-                return response;
-            }
+          const data = (await response.json()) as {
+            token?: string;
+          };
 
-            // Don't refresh the refresh request itself
-            if (
-                typeof input === "string" &&
-                input.includes("/auth/refresh")
-            ) {
-                return response;
-            }
+          if (!data.token) {
+            return null;
+          }
 
-            const refreshResponse = await originalFetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
-                {
-                    method: 'POST',
-                    credentials: 'include', // sends the refreshToken cookie
-                }
-            );
+          setToken(data.token);
 
-            if (!refreshResponse.ok) {
+          return data.token;
+        } catch {
+          return null;
+        } finally {
+          refreshInFlight = null;
+        }
+      })();
 
-                localStorage.removeItem("token");
+      return refreshInFlight;
+    }
 
-                window.location.href =
-                    "/login";
+    async function intercept(
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> {
+      const url = resolveUrl(input);
 
-                return response;
+      const isApi = !!API_URL && url.startsWith(API_URL);
+      const isMedia = !!MEDIA_URL && url.startsWith(MEDIA_URL);
+      const isAuth = isAuthPath(url);
 
-            }
+      const headers = new Headers(
+        init?.headers ??
+          (input instanceof Request ? input.headers : undefined)
+      );
 
-            const refreshData =
-                await refreshResponse.json();
+      const token = getToken();
 
-            localStorage.setItem(
-                "token",
-                refreshData.token
-            );
+      if (isApi && !isMedia && !isAuth && token) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
 
-            headers.set(
-                "Authorization",
-                `Bearer ${refreshData.token}`
-            );
+      const response = await originalFetch(input, {
+        ...init,
+        headers
+      });
 
-            return originalFetch(
-                input,
-                {
-                    ...init,
-                    headers
-                }
-            );
+      if (
+        response.status !== 401 ||
+        !isApi ||
+        isMedia ||
+        isAuth
+      ) {
+        return response;
+      }
 
-        };
+      const nextToken = await refreshToken();
 
-        return () => {
+      if (!nextToken) {
+        clearSession();
 
-            window.fetch =
-                originalFetch;
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
 
-        };
+        return response;
+      }
 
-    }, []);
+      headers.set('Authorization', `Bearer ${nextToken}`);
 
-    return children;
+      return originalFetch(input, {
+        ...init,
+        headers
+      });
+    }
 
+    window.fetch = intercept;
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
+
+  return children;
 }

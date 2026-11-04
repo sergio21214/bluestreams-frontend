@@ -32,8 +32,10 @@ export default function MoviesPage() {
         min-h-screen
         bg-[#050b18]
         text-white
+        px-4
         pt-28
-        px-10
+        sm:px-6
+        lg:px-10
       ">
 
         <h1 className="
@@ -45,9 +47,10 @@ export default function MoviesPage() {
         </h1>
 
         <div className="
-          grid
-          grid-cols-6
-          gap-6
+          flex
+          flex-wrap
+          gap-5
+          pb-16
         ">
 
           {movies.map(movie => (

@@ -3,6 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import {
+  clearSession,
+  getToken,
+  setProfile
+} from '@/lib/auth';
+import { useSession } from '@/lib/useSession';
+
 export default function ProfilesPage() {
 
   const router = useRouter();
@@ -19,28 +26,15 @@ export default function ProfilesPage() {
   const [error, setError] =
     useState('');
 
-  useEffect(() => {
+  const { role } = useSession();
 
-    const token =
-      localStorage.getItem('token');
-
-    if (!token) {
-
-      router.push('/login');
-
-      return;
-    }
-
-    loadProfiles();
-
-  }, []);
+  const admin = role === 'ADMIN';
 
   async function loadProfiles() {
 
     try {
 
-      const token =
-        localStorage.getItem('token');
+      const token = getToken();
 
       const response =
         await fetch(
@@ -105,21 +99,36 @@ export default function ProfilesPage() {
     }
   }
 
+  useEffect(() => {
+
+    if (!getToken()) {
+
+      router.replace('/login');
+
+      return;
+    }
+
+    loadProfiles();
+
+  }, [router]);
+
   function selectProfile(
     profile: any
   ) {
 
-    localStorage.setItem(
-      'profileId',
-      String(profile.id)
-    );
-
-    localStorage.setItem(
-      'profileName',
+    setProfile(
+      profile.id,
       profile.profileName
     );
 
     router.push('/');
+  }
+
+  function logout() {
+
+    clearSession();
+
+    router.replace('/login');
   }
 
   if (loading) {
@@ -176,21 +185,103 @@ export default function ProfilesPage() {
   return (
 
     <main className="
-      bg-black
+      relative
+      bg-[#050b18]
       min-h-screen
       text-white
       flex
       flex-col
       items-center
       justify-center
+      px-6
     ">
+
+      <div className="
+        absolute
+        top-6
+        right-6
+        flex
+        items-center
+        gap-3
+      ">
+
+        {admin && (
+          <a
+            href="/admin"
+            className="
+              rounded-xl
+              bg-white/5
+              px-4
+              py-2
+              text-sm
+              text-zinc-300
+              transition
+              hover:bg-white/10
+              hover:text-white
+            "
+          >
+            Admin
+          </a>
+        )}
+
+        <button
+          onClick={logout}
+          className="
+            rounded-xl
+            bg-white/5
+            px-4
+            py-2
+            text-sm
+            text-zinc-300
+            transition
+            hover:bg-white/10
+            hover:text-white
+          "
+        >
+          Log out
+        </button>
+
+      </div>
+
+      <div className="
+        mb-3
+        flex
+        items-center
+        gap-3
+      ">
+        <span className="
+          flex
+          h-10
+          w-10
+          items-center
+          justify-center
+          rounded-xl
+          bg-gradient-to-br
+          from-blue-500
+          to-blue-700
+          text-lg
+          font-bold
+        ">
+          B
+        </span>
+
+        <span className="
+          text-sm
+          font-semibold
+          uppercase
+          tracking-[0.3em]
+          text-blue-400
+        ">
+          BlueStreams
+        </span>
+      </div>
 
       <h1 className="
         text-5xl
         font-bold
         mb-12
       ">
-        Who's Watching?
+        Who&apos;s Watching?
       </h1>
 
       <div className="

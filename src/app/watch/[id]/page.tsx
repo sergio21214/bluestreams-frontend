@@ -17,6 +17,8 @@ import {
   Style
 } from '@capacitor/status-bar';
 
+import { saveProgress } from '@/lib/progress';
+
 export default function WatchPage() {
 
   const API_URL =
@@ -465,6 +467,12 @@ export default function WatchPage() {
               current >=
                 duration * 0.95;
 
+            saveProgress(
+              media.id,
+              current,
+              duration
+            );
+
             try {
 
               await fetch(
@@ -516,6 +524,14 @@ export default function WatchPage() {
      */
 
     return () => {
+
+      if (videoRef.current) {
+        saveProgress(
+          media.id,
+          videoRef.current.currentTime,
+          videoRef.current.duration || 0
+        );
+      }
 
       if (
         saveTimerRef.current

@@ -3,80 +3,96 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-export default function SearchContent() {
+import MediaCard from '@/components/MediaCard';
+import Navbar from '@/components/Navbar';
+import type { MediaItem } from '@/lib/types';
 
+export default function SearchContent() {
   const params = useSearchParams();
 
-  const query =
-    params.get('q') || '';
+  const query = params.get('q') || '';
 
-  const API_URL =
-    process.env.NEXT_PUBLIC_API_URL;
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  const [results, setResults] =
-    useState<any[]>([]);
+  const [results, setResults] = useState<MediaItem[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!query) {
+      setResults([]);
+      return;
+    }
 
-    if (!query) return;
+    let cancelled = false;
 
-    fetch(
-      `${API_URL}/media/search?q=${encodeURIComponent(query)}`
-    )
-      .then(res => res.json())
-      .then(data => setResults(data));
+    setLoading(true);
 
-  }, [query]);
+    fetch(`${API_URL}/media/search?q=${encodeURIComponent(query)}`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        return response.json();
+      })
+      .then((data: MediaItem[]) => {
+        if (!cancelled) {
+          setResults(data);
+        }
+      })
+      .catch((error) => {
+        console.error('Search failed', error);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [query, API_URL]);
 
   return (
+    <>
+      <Navbar />
 
-    <main className="pt-28 px-10 text-white bg-black min-h-screen">
+      <main className="min-h-screen bg-[#050b18] px-4 pt-28 text-white sm:px-6 lg:px-10">
 
-      <h1 className="text-3xl font-bold mb-8">
-        Search: {query}
-      </h1>
+        <div className="mb-8">
 
-      <div className="grid grid-cols-5 gap-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-400/80">
+            Search
+          </p>
 
-        {results.map(item => (
+          <h1 className="mt-2 text-3xl font-bold sm:text-4xl">
+            {query ? `Results for "${query}"` : 'Search your library'}
+          </h1>
 
-          <div
-            key={item.id}
-            className="
-              bg-zinc-900
-              rounded-xl
-              overflow-hidden
-            "
-          >
+          <p className="mt-2 text-sm text-zinc-400">
+            {loading
+              ? 'Searching...'
+              : `${results.length} result${
+                  results.length === 1 ? '' : 's'
+                }`}
+          </p>
 
-            <img
-              src={item.poster}
-              alt={item.title}
-              className="
-                w-full
-                h-72
-                object-cover
-              "
-            />
+        </div>
 
-            <div className="p-4">
+        {!loading && results.length === 0 && query && (
+          <p className="rounded-2xl border border-white/5 bg-white/[0.02] px-6 py-12 text-center text-sm text-zinc-500">
+            Nothing found. Try a different title.
+          </p>
+        )}
 
-              <h2 className="font-semibold">
-                {item.title}
-              </h2>
+        <div className="flex flex-wrap gap-5 pb-16">
+          {results.map((item) => (
+            <MediaCard key={item.id} item={item} />
+          ))}
+        </div>
 
-              <p className="text-zinc-400 text-sm">
-                {item.mediaType}
-              </p>
-
-            </div>
-
-          </div>
-
-        ))}
-
-      </div>
-
-    </main>
+      </main>
+    </>
   );
 }

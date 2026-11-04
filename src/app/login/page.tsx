@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { clearSession, setToken } from '@/lib/auth';
+
 export default function LoginPage() {
 
   const router = useRouter();
@@ -56,10 +58,8 @@ export default function LoginPage() {
 
       const data = await response.json();
 
-      localStorage.setItem(
-          "token",
-          data.token
-      );
+      clearSession();
+      setToken(data.token);
 
       router.push(
         '/profiles'
@@ -80,29 +80,69 @@ export default function LoginPage() {
 
     <main className="
       min-h-screen
-      bg-black
+      bg-[#050b18]
       text-white
       flex
       items-center
       justify-center
+      px-6
     ">
 
       <div className="
-        bg-zinc-900
-        p-10
-        rounded-2xl
         w-full
         max-w-md
+        rounded-3xl
+        border
+        border-white/10
+        bg-white/[0.04]
+        p-10
+        shadow-2xl
+        shadow-blue-900/20
+        backdrop-blur
       ">
 
-        <h1 className="
-          text-4xl
-          font-bold
-          mb-8
-          text-blue-600
+        <div className="
+          mb-6
+          flex
+          items-center
+          gap-3
         ">
-          BlueStreams
-        </h1>
+
+          <span className="
+            flex
+            h-12
+            w-12
+            items-center
+            justify-center
+            rounded-2xl
+            bg-gradient-to-br
+            from-blue-500
+            to-blue-700
+            text-xl
+            font-bold
+          ">
+            B
+          </span>
+
+          <div>
+
+            <h1 className="
+              text-2xl
+              font-bold
+            ">
+              BlueStreams
+            </h1>
+
+            <p className="
+              text-sm
+              text-zinc-400
+            ">
+              Sign in to your library
+            </p>
+
+          </div>
+
+        </div>
 
         <input
           type="text"

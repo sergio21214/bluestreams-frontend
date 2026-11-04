@@ -1,19 +1,12 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import AudioPlayer
-  from '@/components/AudioPlayer';
+import AudioPlayer from '@/components/AudioPlayer';
 
-import {
-  AudioPlayerProvider
-} from '@/app/context/AudioPlayerContext';
-
-
-import SessionHeartbeat
-    from "@/components/SessionHeartbeat";
-import AuthProvider
-from "@/app/context/AuthProvider";
-
+import { AudioPlayerProvider } from '@/app/context/AudioPlayerContext';
+import AuthProvider from "@/app/context/AuthProvider";
+import AuthGuard from "@/components/AuthGuard";
+import SessionHeartbeat from "@/components/SessionHeartbeat";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,8 +19,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bluestreams",
-  description: "A personal media server frontend built with Next.js and Tailwind CSS.",
+  title: "BlueStreams",
+  description: "Your personal movies, TV and music library.",
 };
 
 export default function RootLayout({
@@ -35,34 +28,24 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-
   return (
     <html lang="en">
-      <body>
-
-       
-
-        <SessionHeartbeat />
-
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <AudioPlayerProvider>
+          <AuthProvider>
+            <SessionHeartbeat />
 
-          <div className="h-screen flex flex-col">
+            <div className="flex h-screen flex-col">
+              <AuthGuard>
+                <main className="flex-1 overflow-y-auto">
+                  {children}
+                </main>
 
-            <AuthProvider>
-              <main className="flex-1 overflow-y-auto">
-
-                {children}
-
-              </main>
-
-              <AudioPlayer />
-            </AuthProvider>
-            
-
-          </div>
-
+                <AudioPlayer />
+              </AuthGuard>
+            </div>
+          </AuthProvider>
         </AudioPlayerProvider>
-
       </body>
     </html>
   );

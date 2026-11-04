@@ -52,8 +52,10 @@ export default function SeriesPage() {
         min-h-screen
         bg-[#050b18]
         text-white
+        px-4
         pt-28
-        px-10
+        sm:px-6
+        lg:px-10
       ">
 
         <h1 className="
@@ -66,8 +68,12 @@ export default function SeriesPage() {
 
         <div className="
           grid
-          grid-cols-5
+          grid-cols-2
           gap-6
+          pb-16
+          sm:grid-cols-3
+          lg:grid-cols-4
+          xl:grid-cols-5
         ">
 
           {series.map(item => (
