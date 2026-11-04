@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   parseXtreamCredentials,
+  safeImageUrl,
   xtreamApi,
   xtreamLiveUrl,
   xtreamMovieUrl,
@@ -19,8 +20,8 @@ import {
 
 type Tab = 'live' | 'series' | 'movies';
 
-const MIXED_CONTENT_HINT =
-  'Could not reach the provider. If this site uses HTTPS, the provider must also offer HTTPS (browsers block HTTP streams on secure pages).';
+const LOAD_ERROR =
+  'Could not load Xtream data. Check that the provider is online and retry.';
 
 export default function XtreamBrowser({
   account,
@@ -57,6 +58,7 @@ export default function XtreamBrowser({
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!credentials) {
@@ -102,7 +104,9 @@ export default function XtreamBrowser({
         console.error('Xtream categories failed', err);
 
         if (!cancelled) {
-          setError(MIXED_CONTENT_HINT);
+          setError(
+            `${LOAD_ERROR}${err instanceof Error ? ` (${err.message})` : ''}`
+          );
           setLoading(false);
         }
       });
@@ -110,7 +114,7 @@ export default function XtreamBrowser({
     return () => {
       cancelled = true;
     };
-  }, [credentials, tab]);
+  }, [credentials, tab, reloadKey]);
 
   useEffect(() => {
     if (!credentials) {
@@ -161,7 +165,9 @@ export default function XtreamBrowser({
         console.error('Xtream list failed', err);
 
         if (!cancelled) {
-          setError(MIXED_CONTENT_HINT);
+          setError(
+            `${LOAD_ERROR}${err instanceof Error ? ` (${err.message})` : ''}`
+          );
           setLoading(false);
         }
       });
@@ -169,7 +175,7 @@ export default function XtreamBrowser({
     return () => {
       cancelled = true;
     };
-  }, [credentials, tab, category, categories.length]);
+  }, [credentials, tab, category, categories.length, reloadKey]);
 
   async function openSeries(series: XtreamSeries) {
     if (!credentials) {
@@ -190,7 +196,9 @@ export default function XtreamBrowser({
       setSeriesInfo(info);
     } catch (err) {
       console.error('Xtream series info failed', err);
-      setError(MIXED_CONTENT_HINT);
+      setError(
+        `${LOAD_ERROR}${err instanceof Error ? ` (${err.message})` : ''}`
+      );
     } finally {
       setLoadingSeries(false);
     }
@@ -362,9 +370,30 @@ export default function XtreamBrowser({
           </div>
 
           {error && (
-            <p className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-              {error}
-            </p>
+            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-300 sm:flex-row sm:items-center sm:justify-between">
+              <p>{error}</p>
+
+              <button
+                type="button"
+                onClick={() => setReloadKey((value) => value + 1)}
+                className="
+                  shrink-0
+                  self-start
+                  rounded-full
+                  bg-red-500/20
+                  px-4
+                  py-1.5
+                  text-xs
+                  font-semibold
+                  text-red-200
+                  transition
+                  hover:bg-red-500/30
+                  sm:self-auto
+                "
+              >
+                Retry
+              </button>
+            </div>
           )}
 
           {loading ? (
@@ -388,7 +417,7 @@ export default function XtreamBrowser({
             <PosterGrid
               items={filteredSeries.slice(0, 300).map((item) => ({
                 key: String(item.series_id),
-                image: item.cover,
+                image: safeImageUrl(item.cover),
                 title: item.name,
                 subtitle: item.rating ? `★ ${item.rating}` : item.genre ?? undefined,
                 onClick: () => openSeries(item)
@@ -399,7 +428,7 @@ export default function XtreamBrowser({
             <PosterGrid
               items={filteredMovies.slice(0, 300).map((item) => ({
                 key: String(item.stream_id),
-                image: item.stream_icon,
+                image: safeImageUrl(item.stream_icon),
                 title: item.name,
                 subtitle: item.rating ? `★ ${item.rating}` : item.container_extension ?? undefined,
                 onClick: () =>
@@ -498,7 +527,9 @@ function LiveList({
 }
 
 function ChannelLogo({ src }: { src?: string | null }) {
-  if (!src || !/^https?:\/\//i.test(src)) {
+  const safeSrc = safeImageUrl(src);
+
+  if (!safeSrc || !/^https?:\/\//i.test(safeSrc)) {
     return (
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/5 text-blue-300">
         ▶
@@ -508,7 +539,7 @@ function ChannelLogo({ src }: { src?: string | null }) {
 
   return (
     <img
-      src={src}
+      src={safeSrc}
       alt=""
       onError={(event) => {
         event.currentTarget.style.display = 'none';
@@ -646,9 +677,9 @@ function SeriesDetail({
 
       <div className="mb-6 flex flex-col gap-5 sm:flex-row">
 
-        {series.cover && /^https?:\/\//i.test(series.cover) && (
+        {safeImageUrl(series.cover) && (
           <img
-            src={series.cover}
+            src={safeImageUrl(series.cover) ?? ''}
             alt={series.name}
             className="h-56 w-40 shrink-0 rounded-2xl object-cover"
           />

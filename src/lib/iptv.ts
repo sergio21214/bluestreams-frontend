@@ -96,6 +96,20 @@ export function isXtreamAccount(
   );
 }
 
+export function safeImageUrl(url?: string | null): string | null {
+  if (!url) {
+    return null;
+  }
+
+  const trimmed = url.trim();
+
+  if (trimmed.startsWith('http://')) {
+    return `https://${trimmed.slice('http://'.length)}`;
+  }
+
+  return trimmed;
+}
+
 export function accountTitle(account: ActiveIptvAccount): string {
   if (isXtreamAccount(account)) {
     return 'Xtream';
@@ -150,17 +164,36 @@ export async function xtreamApi<T>(
     }
   });
 
-  const response = await fetch(proxyUrl(url.toString()), {
-    headers: {
-      Accept: 'application/json'
-    }
-  });
+  const target = proxyUrl(url.toString());
 
-  if (!response.ok) {
-    throw new Error(`Xtream request failed (${response.status})`);
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(target, {
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Xtream request failed (${response.status})`);
+      }
+
+      return (await response.json()) as T;
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+    }
   }
 
-  return (await response.json()) as T;
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Xtream request failed');
 }
 
 function encode(value: string): string {
