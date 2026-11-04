@@ -10,8 +10,7 @@ import {
   accountTitle,
   authHeaders,
   isXtreamAccount,
-  type ActiveIptvAccount,
-  type VodSubtitleTrack
+  type ActiveIptvAccount
 } from '@/lib/iptv';
 
 type Tab = 'live' | 'series' | 'movies';
@@ -27,7 +26,6 @@ type PlayerState = {
   isHls: boolean;
   title: string;
   subtitle?: string;
-  subtitles?: VodSubtitleTrack[];
 };
 
 export default function TVPage() {
@@ -131,10 +129,9 @@ export default function TVPage() {
     src: string,
     isHls: boolean,
     title: string,
-    subtitle?: string,
-    subtitles?: VodSubtitleTrack[]
+    subtitle?: string
   ) {
-    setPlayer({ src, isHls, title, subtitle, subtitles });
+    setPlayer({ src, isHls, title, subtitle });
   }
 
   return (
@@ -369,7 +366,6 @@ export default function TVPage() {
                   isHls={player?.isHls ?? false}
                   title={player?.title}
                   subtitle={player?.subtitle}
-                  subtitles={player?.subtitles}
                 />
 
               </aside>
