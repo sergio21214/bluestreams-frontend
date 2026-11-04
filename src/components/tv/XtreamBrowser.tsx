@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   parseXtreamCredentials,
+  prepareVodSession,
   safeImageUrl,
   xtreamApi,
   xtreamLiveUrl,
-  xtreamMovieUrl,
-  xtreamSeriesUrl,
+  xtreamMovieUpstreamUrl,
+  xtreamSeriesUpstreamUrl,
   type ActiveIptvAccount,
+  type VodSubtitleTrack,
   type XtreamCategory,
   type XtreamEpisode,
   type XtreamLiveStream,
@@ -34,7 +36,8 @@ export default function XtreamBrowser({
     src: string,
     isHls: boolean,
     title: string,
-    subtitle?: string
+    subtitle?: string,
+    subtitles?: VodSubtitleTrack[]
   ) => void;
 }) {
   const credentials = useMemo(
@@ -59,6 +62,9 @@ export default function XtreamBrowser({
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [preparingKey, setPreparingKey] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     if (!credentials) {
@@ -204,6 +210,42 @@ export default function XtreamBrowser({
     }
   }
 
+  async function prepareAndPlay(
+    key: string,
+    upstreamUrl: string,
+    title: string,
+    subtitle?: string
+  ) {
+    if (preparingKey) {
+      return;
+    }
+
+    setPreparingKey(key);
+    setError('');
+
+    try {
+      const session = await prepareVodSession(upstreamUrl);
+
+      onPlay(
+        session.master,
+        true,
+        title,
+        subtitle,
+        session.subtitles
+      );
+    } catch (err) {
+      console.error('Could not prepare video', err);
+
+      setError(
+        `Could not prepare video.${
+          err instanceof Error ? ` (${err.message})` : ''
+        }`
+      );
+    } finally {
+      setPreparingKey(null);
+    }
+  }
+
   function playEpisode(
     series: XtreamSeries,
     season: string,
@@ -213,15 +255,32 @@ export default function XtreamBrowser({
       return;
     }
 
-    onPlay(
-      xtreamSeriesUrl(
+    void prepareAndPlay(
+      `episode-${episode.id}`,
+      xtreamSeriesUpstreamUrl(
         credentials,
         episode.id,
         episode.container_extension
       ),
-      false,
       `${series.name} • S${season}E${episode.episode_num ?? ''}`,
       episode.title ?? undefined
+    );
+  }
+
+  function playMovie(item: XtreamMovie) {
+    if (!credentials) {
+      return;
+    }
+
+    void prepareAndPlay(
+      `movie-${item.stream_id}`,
+      xtreamMovieUpstreamUrl(
+        credentials,
+        item.stream_id,
+        item.container_extension
+      ),
+      item.name,
+      item.container_extension ?? undefined
     );
   }
 
@@ -260,12 +319,20 @@ export default function XtreamBrowser({
   return (
     <div>
 
+      {preparingKey && (
+        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-200">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-300/30 border-t-blue-300" />
+          Preparing video and tracks... this can take a few seconds.
+        </div>
+      )}
+
       {selectedSeries ? (
         <SeriesDetail
           series={selectedSeries}
           info={seriesInfo}
           loading={loadingSeries}
           error={error}
+          preparingKey={preparingKey}
           onBack={() => {
             setSelectedSeries(null);
             setSeriesInfo(null);
@@ -430,18 +497,13 @@ export default function XtreamBrowser({
                 key: String(item.stream_id),
                 image: safeImageUrl(item.stream_icon),
                 title: item.name,
-                subtitle: item.rating ? `★ ${item.rating}` : item.container_extension ?? undefined,
-                onClick: () =>
-                  onPlay(
-                    xtreamMovieUrl(
-                      credentials,
-                      item.stream_id,
-                      item.container_extension
-                    ),
-                    false,
-                    item.name,
-                    item.container_extension ?? undefined
-                  )
+                subtitle:
+                  preparingKey === `movie-${item.stream_id}`
+                    ? 'Preparing...'
+                    : item.rating
+                      ? `★ ${item.rating}`
+                      : item.container_extension ?? undefined,
+                onClick: () => playMovie(item)
               }))}
               total={filteredMovies.length}
             />
@@ -646,6 +708,7 @@ function SeriesDetail({
   info,
   loading,
   error,
+  preparingKey,
   onBack,
   onPlay
 }: {
@@ -653,6 +716,7 @@ function SeriesDetail({
   info: XtreamSeriesInfo | null;
   loading: boolean;
   error: string;
+  preparingKey: string | null;
   onBack: () => void;
   onPlay: (
     series: XtreamSeries,
@@ -734,6 +798,7 @@ function SeriesDetail({
                     type="button"
                     key={`${season}-${episode.id}`}
                     onClick={() => onPlay(series, season, episode)}
+                    disabled={Boolean(preparingKey)}
                     className="
                       flex
                       w-full
@@ -746,6 +811,8 @@ function SeriesDetail({
                       text-left
                       transition
                       hover:bg-white/[0.07]
+                      disabled:cursor-not-allowed
+                      disabled:opacity-60
                     "
                   >
 
@@ -766,7 +833,9 @@ function SeriesDetail({
                     </span>
 
                     <span className="shrink-0 text-xs text-blue-400">
-                      Play
+                      {preparingKey === `episode-${episode.id}`
+                        ? 'Preparing...'
+                        : 'Play'}
                     </span>
 
                   </button>

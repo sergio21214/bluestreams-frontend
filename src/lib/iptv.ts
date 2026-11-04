@@ -65,6 +65,20 @@ export type XtreamMovie = {
   plot?: string | null;
 };
 
+export type VodSubtitleTrack = {
+  index: number;
+  label: string;
+  language: string;
+  fileName: string;
+  url: string;
+};
+
+export type VodSessionInfo = {
+  id: string;
+  master: string;
+  subtitles: VodSubtitleTrack[];
+};
+
 export type LegacyChannel = {
   id: number;
   name: string;
@@ -211,18 +225,38 @@ export function xtreamLiveUrl(
   return proxyUrl(upstream);
 }
 
-export function xtreamMovieUrl(
+export function xtreamMovieUpstreamUrl(
   credentials: XtreamCredentials,
   streamId: number | string,
   extension?: string | null
 ): string {
   const ext = cleanExtension(extension);
 
-  const upstream = `${credentials.server}/movie/${encode(
+  return `${credentials.server}/movie/${encode(
     credentials.username
   )}/${encode(credentials.password)}/${streamId}.${ext}`;
+}
 
-  return proxyUrl(upstream);
+export function xtreamMovieUrl(
+  credentials: XtreamCredentials,
+  streamId: number | string,
+  extension?: string | null
+): string {
+  return proxyUrl(
+    xtreamMovieUpstreamUrl(credentials, streamId, extension)
+  );
+}
+
+export function xtreamSeriesUpstreamUrl(
+  credentials: XtreamCredentials,
+  episodeId: number | string,
+  extension?: string | null
+): string {
+  const ext = cleanExtension(extension);
+
+  return `${credentials.server}/series/${encode(
+    credentials.username
+  )}/${encode(credentials.password)}/${episodeId}.${ext}`;
 }
 
 export function xtreamSeriesUrl(
@@ -230,13 +264,35 @@ export function xtreamSeriesUrl(
   episodeId: number | string,
   extension?: string | null
 ): string {
-  const ext = cleanExtension(extension);
+  return proxyUrl(
+    xtreamSeriesUpstreamUrl(credentials, episodeId, extension)
+  );
+}
 
-  const upstream = `${credentials.server}/series/${encode(
-    credentials.username
-  )}/${encode(credentials.password)}/${episodeId}.${ext}`;
+export async function prepareVodSession(
+  upstreamUrl: string
+): Promise<VodSessionInfo> {
+  const response = await fetch(
+    `/api/xtream/vod/start?url=${encodeURIComponent(upstreamUrl)}`,
+    {
+      cache: 'no-store'
+    }
+  );
 
-  return proxyUrl(upstream);
+  const data = (await response.json().catch(() => null)) as
+    | VodSessionInfo
+    | { error?: string }
+    | null;
+
+  if (!response.ok) {
+    throw new Error(
+      data && 'error' in data && data.error
+        ? data.error
+        : `Could not prepare video (${response.status})`
+    );
+  }
+
+  return data as VodSessionInfo;
 }
 
 function cleanExtension(extension?: string | null): string {
