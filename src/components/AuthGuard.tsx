@@ -1,15 +1,36 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
-import { useSession } from '@/lib/useSession';
+import {
+  SESSION_EVENT,
+  getProfileId,
+  getRole,
+  getToken
+} from '@/lib/auth';
 
 const PUBLIC_ROUTES = ['/login', '/register'];
 const PUBLIC_PREFIXES = ['/register'];
 
 const NO_PROFILE_ROUTES = ['/profiles', '/admin'];
 const ADMIN_ROUTES = ['/admin'];
+
+type ClientSession = {
+  token: string | null;
+  profileId: string | null;
+  role: string | null;
+};
+
+function readSession(): ClientSession {
+  const token = getToken();
+
+  return {
+    token,
+    profileId: getProfileId(),
+    role: getRole(token)
+  };
+}
 
 function matches(
   pathname: string,
@@ -46,7 +67,27 @@ export default function AuthGuard({
   const pathname = usePathname();
   const router = useRouter();
 
-  const { token, profileId, role } = useSession();
+  const [session, setSession] =
+    useState<ClientSession | null>(null);
+
+  /*
+   * Read the session only on the client, after hydration. This avoids
+   * redirecting on the server-render snapshot while the browser still
+   * has a valid token in localStorage.
+   */
+  useEffect(() => {
+    const update = () => setSession(readSession());
+
+    update();
+
+    window.addEventListener(SESSION_EVENT, update);
+    window.addEventListener('storage', update);
+
+    return () => {
+      window.removeEventListener(SESSION_EVENT, update);
+      window.removeEventListener('storage', update);
+    };
+  }, [pathname]);
 
   const isPublic = matches(
     pathname,
@@ -59,35 +100,34 @@ export default function AuthGuard({
 
   const allowed =
     isPublic ||
-    (!!token &&
-      (!isAdminRoute || role === 'ADMIN') &&
-      (!needsProfile || !!profileId));
+    (session !== null &&
+      !!session.token &&
+      (!isAdminRoute || session.role === 'ADMIN') &&
+      (!needsProfile || !!session.profileId));
 
   useEffect(() => {
-    if (isPublic) {
+    if (isPublic || session === null) {
       return;
     }
 
-    if (!token) {
+    if (!session.token) {
       router.replace('/login');
       return;
     }
 
-    if (isAdminRoute && role !== 'ADMIN') {
+    if (isAdminRoute && session.role !== 'ADMIN') {
       router.replace('/');
       return;
     }
 
-    if (needsProfile && !profileId) {
+    if (needsProfile && !session.profileId) {
       router.replace('/profiles');
     }
   }, [
     isPublic,
     isAdminRoute,
     needsProfile,
-    token,
-    profileId,
-    role,
+    session,
     router
   ]);
 
