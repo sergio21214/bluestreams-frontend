@@ -1,732 +1,145 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRef } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+
+import IptvSection from '@/components/admin/IptvSection';
+import MusicSection from '@/components/admin/MusicSection';
+import OverviewSection from '@/components/admin/OverviewSection';
+import ProfilesSection from '@/components/admin/ProfilesSection';
+import QueueSection from '@/components/admin/QueueSection';
+import UsersSection from '@/components/admin/UsersSection';
+import { clearSession } from '@/lib/auth';
+import type { AdminTab } from '@/lib/admin';
+
+const TABS: {
+  id: AdminTab;
+  label: string;
+}[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'users', label: 'Users' },
+  { id: 'profiles', label: 'Profiles' },
+  { id: 'iptv', label: 'IPTV' },
+  { id: 'queue', label: 'Queue' },
+  { id: 'music', label: 'Music' }
+];
 
 export default function AdminPage() {
+  const router = useRouter();
 
-  const API_URL =
-    process.env.NEXT_PUBLIC_API_URL;
+  const [tab, setTab] = useState<AdminTab>('overview');
 
-  const [status, setStatus] =
-    useState<any>();
-
-  const [message, setMessage] =
-    useState('');
-
-  const [users, setUsers] =
-    useState<any[]>([]);
-
-  const [profiles, setProfiles] =
-    useState<any[]>([]);
-
-  const [newUsername, setNewUsername] =
-    useState('');
-
-  const [newEmail, setNewEmail] =
-    useState('');
-
-  const [newPassword, setNewPassword] =
-    useState('');
-
-  const [newRole, setNewRole] =
-    useState('USER');
-  
-  const fileInputRef =
-    useRef<HTMLInputElement>(null);
-
-  const [uploadMessage, setUploadMessage] =
-    useState('');
-
-  async function loadStatus() {
-
-    const token =
-      localStorage.getItem('token');
-
-    const response =
-      await fetch(
-        `${API_URL}/admin/status`,
-        {
-          headers: {
-            Authorization:
-              `Bearer ${token}`
-          }
-        }
-      );
-
-    const data =
-      await response.json();
-
-    setStatus(data);
+  function logout() {
+    clearSession();
+    router.replace('/login');
   }
-
-  async function loadUsers() {
-
-    const token =
-      localStorage.getItem('token');
-
-    const response =
-      await fetch(
-        `${API_URL}/admin/users`,
-        {
-          headers: {
-            Authorization:
-              `Bearer ${token}`
-          }
-        }
-      );
-
-    const data =
-      await response.json();
-
-    setUsers(data);
-  }
-
-  async function loadProfiles() {
-
-    const token =
-      localStorage.getItem('token');
-
-    const response =
-      await fetch(
-        `${API_URL}/admin/profiles`,
-        {
-          headers: {
-            Authorization:
-              `Bearer ${token}`
-          }
-        }
-      );
-
-    const data =
-      await response.json();
-
-    setProfiles(data);
-  }
-
-  async function runScan() {
-
-    const token =
-      localStorage.getItem('token');
-
-    const response =
-      await fetch(
-        `${API_URL}/admin/scan`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization:
-              `Bearer ${token}`
-          }
-        }
-      );
-
-    const text =
-      await response.text();
-
-    setMessage(text);
-
-    loadStatus();
-  }
-
-  async function createUser() {
-
-    const token =
-      localStorage.getItem('token');
-
-    await fetch(
-      `${API_URL}/admin/users`,
-      {
-        method: 'POST',
-
-        headers: {
-          Authorization:
-            `Bearer ${token}`,
-
-          'Content-Type':
-            'application/json'
-        },
-
-        body: JSON.stringify({
-
-          username:
-            newUsername,
-
-          email:
-            newEmail,
-
-          password:
-            newPassword,
-
-          role:
-            newRole
-        })
-      }
-    );
-
-    setNewUsername('');
-    setNewEmail('');
-    setNewPassword('');
-
-    loadUsers();
-    loadProfiles();
-    loadStatus();
-  }
-
-  async function deleteUser(
-    id: number
-  ) {
-
-    const token =
-      localStorage.getItem('token');
-
-    await fetch(
-      `${API_URL}/admin/users/${id}`,
-      {
-        method: 'DELETE',
-
-        headers: {
-          Authorization:
-            `Bearer ${token}`
-        }
-      }
-    );
-
-    loadUsers();
-    loadProfiles();
-    loadStatus();
-  }
-
-  async function deleteProfile(
-    id: number
-  ) {
-
-    const token =
-      localStorage.getItem('token');
-
-    await fetch(
-      `${API_URL}/admin/profiles/${id}`,
-      {
-        method: 'DELETE',
-
-        headers: {
-          Authorization:
-            `Bearer ${token}`
-        }
-      }
-    );
-
-    loadProfiles();
-    loadStatus();
-  }
-
-  async function uploadPlaylist(
-    event: React.ChangeEvent<HTMLInputElement>
-  ) {
-
-    const file =
-      event.target.files?.[0];
-
-    if (!file) return;
-
-    const token =
-      localStorage.getItem('token');
-
-    const formData =
-      new FormData();
-
-    formData.append(
-      'file',
-      file
-    );
-
-    const content = await file.text();
-
-     const response = await fetch(
-        `${API_URL}/admin/iptv/import-file`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: file.name,
-            content,
-          }),
-        }
-      );
-
-
-    if (response.ok) {
-
-      setUploadMessage(
-        'Playlist imported successfully.'
-      );
-
-    } else {
-
-      setUploadMessage(
-        'Import failed.'
-      );
-
-    }
-
-  }
-
-  useEffect(() => {
-
-    loadStatus();
-
-    loadUsers();
-
-    loadProfiles();
-
-  }, []);
 
   return (
+    <main className="min-h-screen bg-[#050b18] text-white">
 
-    <main className="
-      min-h-screen
-      bg-slate-950
-      text-white
-      p-10
-    ">
+      <header className="border-b border-white/5 bg-[#03070f] px-4 py-4 lg:px-8">
+        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-4">
 
-      <h1 className="
-        text-5xl
-        font-bold
-        text-blue-400
-        mb-10
-      ">
-        BlueStreams Admin
-      </h1>
+          <Link href="/" className="flex items-center gap-3">
 
-      {status && (
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-lg font-bold shadow-lg shadow-blue-900/40">
+              B
+            </span>
 
-        <div className="
-          grid
-          md:grid-cols-3
-          gap-6
-          mb-10
-        ">
+            <div>
+              <p className="text-sm font-bold tracking-wide">
+                BlueStreams
+              </p>
+              <p className="text-[11px] uppercase tracking-[0.25em] text-blue-400/80">
+                Admin console
+              </p>
+            </div>
 
-          <div className="
-            bg-slate-900
-            rounded-2xl
-            p-6
-          ">
+          </Link>
 
-            <h2 className="text-slate-400">
-              Media
-            </h2>
+          <div className="flex flex-wrap items-center gap-2">
 
-            <p className="
-              text-4xl
-              font-bold
-            ">
-              {status.mediaCount}
-            </p>
+            <Link
+              href="/admin/music"
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-white/10 hover:text-white"
+            >
+              Music downloader
+            </Link>
 
-          </div>
+            <Link
+              href="/"
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-white/10 hover:text-white"
+            >
+              Back to app
+            </Link>
 
-          <div className="
-            bg-slate-900
-            rounded-2xl
-            p-6
-          ">
-
-            <h2 className="text-slate-400">
-              Users
-            </h2>
-
-            <p className="
-              text-4xl
-              font-bold
-            ">
-              {status.userCount}
-            </p>
-
-          </div>
-
-          <div className="
-            bg-slate-900
-            rounded-2xl
-            p-6
-          ">
-
-            <h2 className="text-slate-400">
-              Profiles
-            </h2>
-
-            <p className="
-              text-4xl
-              font-bold
-            ">
-              {status.profileCount}
-            </p>
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-zinc-400 transition hover:bg-white/10 hover:text-white"
+            >
+              Log out
+            </button>
 
           </div>
 
         </div>
+      </header>
 
-      )}
+      <div className="mx-auto max-w-[1500px] px-4 py-6 lg:px-8">
 
-      <div className="flex gap-4">
+        <div className="mb-6">
 
-          <button
-            onClick={runScan}
-            className="
-              bg-blue-600
-              hover:bg-blue-500
-              px-6
-              py-3
-              rounded-xl
-              font-semibold
-            "
-          >
-            Run Media Scan
-          </button>
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-400/80">
+            Administration
+          </p>
 
-          <button
-            onClick={() =>
-              fileInputRef.current?.click()
-            }
-            className="
-              bg-green-600
-              hover:bg-green-500
-              px-6
-              py-3
-              rounded-xl
-              font-semibold
-            "
-          >
-            Import IPTV Playlist
-          </button>
+          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
+            Control your server
+          </h1>
 
-                <div className="
-                  mt-6
-                  bg-slate-900
-                  rounded-2xl
-                  p-6
-                  flex
-                  items-center
-                  justify-between
-                ">
-
-                  <div>
-                    <h2 className="
-                      text-2xl
-                      font-bold
-                      text-blue-400
-                    ">
-                      Music
-                    </h2>
-
-                    <p className="
-                      text-slate-400
-                      mt-1
-                    ">
-                      Download and manage music from YouTube and YouTube Music.
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() =>
-                      window.location.href = '/admin/music'
-                    }
-                    className="
-                      bg-blue-600
-                      hover:bg-blue-500
-                      px-6
-                      py-3
-                      rounded-xl
-                      font-semibold
-                      transition
-                    "
-                  >
-                    Music Downloader
-                  </button>
-
-                </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".m3u,.m3u8"
-            hidden
-            onChange={uploadPlaylist}
-          />
-
-      </div>
-
-      {message && (
-
-        <p className="
-          text-green-400
-          mt-4
-        ">
-          {message}
-        </p>
-
-      )}
-      {uploadMessage && (
-
-        <p className="
-          text-green-400
-          mt-2
-        ">
-          {uploadMessage}
-        </p>
-
-      )}
-
-      <div className="
-        mt-12
-        bg-slate-900
-        rounded-2xl
-        p-6
-      ">
-
-        <h2 className="
-          text-2xl
-          font-bold
-          text-blue-400
-          mb-6
-        ">
-          Create User
-        </h2>
-
-        <div className="
-          grid
-          md:grid-cols-4
-          gap-3
-        ">
-
-          <input
-            value={newUsername}
-            onChange={(e) =>
-              setNewUsername(
-                e.target.value
-              )
-            }
-            placeholder="Username"
-            className="
-              bg-slate-800
-              p-3
-              rounded-xl
-            "
-          />
-
-          <input
-            value={newEmail}
-            onChange={(e) =>
-              setNewEmail(
-                e.target.value
-              )
-            }
-            placeholder="Email"
-            className="
-              bg-slate-800
-              p-3
-              rounded-xl
-            "
-          />
-
-          <input
-            value={newPassword}
-            onChange={(e) =>
-              setNewPassword(
-                e.target.value
-              )
-            }
-            placeholder="Password"
-            className="
-              bg-slate-800
-              p-3
-              rounded-xl
-            "
-          />
-
-          <button
-            onClick={createUser}
-            className="
-              bg-blue-600
-              hover:bg-blue-500
-              rounded-xl
-            "
-          >
-            Create User
-          </button>
+          <p className="mt-2 max-w-2xl text-sm text-zinc-400">
+            Manage users and profiles, monitor IPTV providers, and keep your
+            media library healthy.
+          </p>
 
         </div>
 
-      </div>
+        <nav className="mb-6 flex gap-2 overflow-x-auto pb-1">
 
-      <div className="
-        mt-12
-        bg-slate-900
-        rounded-2xl
-        p-6
-      ">
+          {TABS.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              onClick={() => setTab(item.id)}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                tab === item.id
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
 
-        <h2 className="
-          text-2xl
-          font-bold
-          text-blue-400
-          mb-6
-        ">
-          Users
-        </h2>
+        </nav>
 
-        <table className="w-full">
+        {tab === 'overview' && (
+          <OverviewSection onNavigate={setTab} />
+        )}
 
-          <thead>
+        {tab === 'users' && (
+          <UsersSection onNavigate={setTab} />
+        )}
 
-            <tr className="text-left">
+        {tab === 'profiles' && <ProfilesSection />}
 
-              <th>ID</th>
-              <th>Username</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th></th>
+        {tab === 'iptv' && <IptvSection />}
 
-            </tr>
+        {tab === 'queue' && <QueueSection />}
 
-          </thead>
-
-          <tbody>
-
-            {users.map(user => (
-
-              <tr
-                key={user.id}
-                className="
-                  border-t
-                  border-slate-700
-                "
-              >
-
-                <td>{user.id}</td>
-                <td>{user.username}</td>
-                <td>{user.email}</td>
-                <td>{user.role}</td>
-
-                <td>
-
-                  <button
-                    onClick={() =>
-                      deleteUser(
-                        user.id
-                      )
-                    }
-                    className="
-                      bg-red-600
-                      hover:bg-red-500
-                      px-3
-                      py-1
-                      rounded
-                    "
-                  >
-                    Delete
-                  </button>
-
-                </td>
-
-              </tr>
-
-            ))}
-
-          </tbody>
-
-        </table>
-
-      </div>
-
-      <div className="
-        mt-12
-        bg-slate-900
-        rounded-2xl
-        p-6
-      ">
-
-        <h2 className="
-          text-2xl
-          font-bold
-          text-blue-400
-          mb-6
-        ">
-          Profiles
-        </h2>
-
-        <table className="w-full">
-
-          <thead>
-
-            <tr className="text-left">
-
-              <th>ID</th>
-              <th>User ID</th>
-              <th>Name</th>
-              <th>Kids</th>
-              <th></th>
-
-            </tr>
-
-          </thead>
-
-          <tbody>
-
-            {profiles.map(profile => (
-
-              <tr
-                key={profile.id}
-                className="
-                  border-t
-                  border-slate-700
-                "
-              >
-
-                <td>{profile.id}</td>
-
-                <td>{profile.userId}</td>
-
-                <td>{profile.profileName}</td>
-
-                <td>
-                  {profile.isKidsProfile
-                    ? 'Yes'
-                    : 'No'}
-                </td>
-
-                <td>
-
-                  <button
-                    onClick={() =>
-                      deleteProfile(
-                        profile.id
-                      )
-                    }
-                    className="
-                      bg-red-600
-                      hover:bg-red-500
-                      px-3
-                      py-1
-                      rounded
-                    "
-                  >
-                    Delete
-                  </button>
-
-                </td>
-
-              </tr>
-
-            ))}
-
-          </tbody>
-
-        </table>
+        {tab === 'music' && <MusicSection />}
 
       </div>
 
