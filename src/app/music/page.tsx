@@ -76,7 +76,7 @@ const QUICK_LINKS = [
 export default function MusicPage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  const { playTrack } = useAudioPlayer();
+  const { playTrack, currentTrack, showPlayer } = useAudioPlayer();
 
   const [home, setHome] = useState<MusicHome | null>(null);
   const [library, setLibrary] = useState<MusicLibrary | null>(null);
@@ -205,6 +205,36 @@ export default function MusicPage() {
     return Array.from(tracks.values());
   }, [library]);
 
+  const randomPool = useMemo(() => {
+    if (!library) {
+      return [];
+    }
+
+    const term = filter.trim().toLowerCase();
+
+    const sourceArtists = term
+      ? library.artists.filter(
+          (artist) =>
+            artist.name.toLowerCase().includes(term) ||
+            artist.albums.some((album) =>
+              album.name.toLowerCase().includes(term)
+            )
+        )
+      : library.artists;
+
+    const tracks = new Map<number, MusicTrack>();
+
+    sourceArtists.forEach((artist) => {
+      artist.albums.forEach((album) => {
+        album.tracks.forEach((track) => {
+          tracks.set(track.id, track);
+        });
+      });
+    });
+
+    return Array.from(tracks.values());
+  }, [library, filter]);
+
   const jumpBackIn = useMemo(() => {
     const tracks = new Map<number, MusicTrack>();
 
@@ -240,6 +270,25 @@ export default function MusicPage() {
     if (allTracks.length > 0) {
       playTrack(allTracks[0], allTracks);
     }
+  }
+
+  function playRandomSong() {
+    if (randomPool.length === 0) {
+      return;
+    }
+
+    const candidates =
+      randomPool.length > 1
+        ? randomPool.filter(
+            (track) => track.id !== currentTrack?.id
+          )
+        : randomPool;
+
+    const pool = candidates.length > 0 ? candidates : randomPool;
+    const track =
+      pool[Math.floor(Math.random() * pool.length)];
+
+    playTrack(track, randomPool);
   }
 
   function selectArtist(artist: MusicArtist) {
@@ -334,7 +383,7 @@ export default function MusicPage() {
 
       <div className="space-y-10 p-4 pb-16 sm:p-6 lg:p-10">
 
-        {/* HERO */}
+        {/* HERO + JUMP BACK IN */}
 
         <section
           className="
@@ -346,218 +395,181 @@ export default function MusicPage() {
             via-blue-800
             to-[#050b18]
             p-6
-            sm:p-10
+            sm:p-8
+            lg:p-10
           "
         >
 
           <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
           <div className="absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-cyan-400/20 blur-3xl" />
 
-          <div className="relative max-w-2xl">
+          <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-center">
 
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-100/70">
-              Welcome back
-            </p>
+            <div>
 
-            <h2 className="mt-2 text-4xl font-black tracking-tight sm:text-6xl">
-              Good evening
-            </h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-100/70">
+                Welcome back
+              </p>
 
-            <p className="mt-3 max-w-lg text-sm text-blue-100/70">
-              {continuePlaying
-                ? `Continue where you left off with "${continuePlaying.title}".`
-                : 'Your movies, shows and music, all in one place.'}
-            </p>
+              <h2 className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">
+                Good evening
+              </h2>
 
-            <div className="mt-6 flex flex-wrap gap-3">
+              <p className="mt-3 max-w-lg text-sm text-blue-100/70">
+                {continuePlaying
+                  ? `Continue where you left off with "${continuePlaying.title}".`
+                  : 'Your movies, shows and music, all in one place.'}
+              </p>
 
-              {continuePlaying && (
+              <div className="mt-6 flex flex-wrap gap-3">
+
+                {continuePlaying && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      playTrack(continuePlaying, jumpBackIn)
+                    }
+                    className="
+                      flex
+                      items-center
+                      gap-2
+                      rounded-full
+                      bg-white
+                      px-6
+                      py-3
+                      text-sm
+                      font-bold
+                      text-black
+                      shadow-xl
+                      transition
+                      hover:scale-105
+                      hover:bg-blue-50
+                    "
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="h-4 w-4"
+                    >
+                      <path d="M8 5v14l11-7L8 5z" />
+                    </svg>
+                    Resume
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() =>
-                    playTrack(continuePlaying, jumpBackIn)
-                  }
+                  onClick={playLibrary}
+                  disabled={allTracks.length === 0}
                   className="
-                    flex
-                    items-center
-                    gap-2
                     rounded-full
-                    bg-white
+                    border
+                    border-white/25
+                    bg-white/10
                     px-6
                     py-3
                     text-sm
-                    font-bold
-                    text-black
-                    shadow-xl
-                    transition
-                    hover:scale-105
-                    hover:bg-blue-50
-                  "
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className="h-4 w-4"
-                  >
-                    <path d="M8 5v14l11-7L8 5z" />
-                  </svg>
-                  Resume
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={playLibrary}
-                disabled={allTracks.length === 0}
-                className="
-                  rounded-full
-                  border
-                  border-white/25
-                  bg-white/10
-                  px-6
-                  py-3
-                  text-sm
-                  font-semibold
-                  text-white
-                  backdrop-blur
-                  transition
-                  hover:bg-white/20
-                  disabled:cursor-not-allowed
-                  disabled:opacity-40
-                "
-              >
-                Play library
-              </button>
-
-            </div>
-
-          </div>
-
-          {continuePlaying?.poster && (
-            <img
-              src={continuePlaying.poster}
-              alt={continuePlaying.title}
-              className="
-                absolute
-                bottom-0
-                right-6
-                hidden
-                h-56
-                w-56
-                rounded-2xl
-                object-cover
-                shadow-2xl
-                shadow-black/50
-                lg:block
-              "
-            />
-          )}
-
-        </section>
-
-        {/* QUICK LINKS */}
-
-        <section>
-
-          <h2 className="mb-4 text-xl font-bold">
-            Jump back in
-          </h2>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-
-            {QUICK_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`
-                  group
-                  flex
-                  items-center
-                  gap-4
-                  rounded-2xl
-                  bg-gradient-to-r
-                  ${link.gradient}
-                  p-4
-                  transition
-                  hover:scale-[1.02]
-                `}
-              >
-
-                <span
-                  className="
-                    flex
-                    h-12
-                    w-12
-                    shrink-0
-                    items-center
-                    justify-center
-                    rounded-xl
-                    bg-black/25
-                    text-blue-200
+                    font-semibold
+                    text-white
                     backdrop-blur
+                    transition
+                    hover:bg-white/20
+                    disabled:cursor-not-allowed
+                    disabled:opacity-40
                   "
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-5 w-5"
-                  >
-                    <path d={link.icon} />
-                  </svg>
-                </span>
+                  Play library
+                </button>
 
-                <span className="min-w-0">
-                  <span className="block truncate font-semibold">
-                    {link.title}
-                  </span>
-                  <span className="block truncate text-xs text-blue-100/60">
-                    {link.caption}
-                  </span>
-                </span>
-
-              </Link>
-            ))}
-
-          </div>
-
-        </section>
-
-        {/* MADE FOR YOU */}
-
-        {jumpBackIn.length > 0 && (
-          <section>
-
-            <div className="mb-4 flex items-end justify-between">
-
-              <div>
-                <h2 className="text-xl font-bold">
-                  Made for you
-                </h2>
-                <p className="mt-1 text-sm text-zinc-400">
-                  Based on what you have been playing.
-                </p>
               </div>
 
             </div>
 
-            <div className="flex gap-4 overflow-x-auto pb-2">
-              {jumpBackIn.map((track) => (
-                <MusicCard
-                  key={track.id}
-                  image={track.poster}
-                  title={track.title}
-                  subtitle={track.artist}
-                  onPlay={() => playTrack(track, jumpBackIn)}
-                />
-              ))}
+            <div>
+
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100/70">
+                  Jump back in
+                </h3>
+              </div>
+
+              <div className="space-y-2">
+
+                {QUICK_LINKS.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="
+                      group
+                      flex
+                      items-center
+                      gap-3
+                      rounded-2xl
+                      bg-black/20
+                      p-3
+                      transition
+                      hover:bg-black/30
+                    "
+                  >
+
+                    <span
+                      className="
+                        flex
+                        h-10
+                        w-10
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-xl
+                        bg-white/10
+                        text-blue-100
+                        backdrop-blur
+                      "
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-5 w-5"
+                      >
+                        <path d={link.icon} />
+                      </svg>
+                    </span>
+
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">
+                        {link.title}
+                      </span>
+                      <span className="block truncate text-xs text-blue-100/60">
+                        {link.caption}
+                      </span>
+                    </span>
+
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-4 w-4 shrink-0 text-blue-100/40 transition group-hover:translate-x-0.5 group-hover:text-blue-100"
+                    >
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
+
+                  </Link>
+                ))}
+
+              </div>
+
             </div>
 
-          </section>
-        )}
+          </div>
+
+        </section>
 
         {/* GENRES + ARTISTS */}
 
@@ -722,6 +734,58 @@ export default function MusicPage() {
         </section>
 
       </div>
+
+      {/* CONTEXTUAL RANDOM SONG */}
+
+      <button
+        type="button"
+        onClick={playRandomSong}
+        disabled={randomPool.length === 0 || loadingLibrary}
+        title="Play a random song from the current filter"
+        aria-label="Play a random song from the current filter"
+        className={`
+          fixed
+          right-4
+          z-40
+          flex
+          items-center
+          gap-2
+          rounded-full
+          bg-blue-600
+          px-5
+          py-3
+          text-sm
+          font-semibold
+          text-white
+          shadow-2xl
+          shadow-blue-900/40
+          transition
+          hover:scale-105
+          hover:bg-blue-500
+          disabled:cursor-not-allowed
+          disabled:opacity-50
+          sm:right-6
+          lg:right-10
+          ${showPlayer ? 'bottom-28' : 'bottom-6'}
+        `}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-5 w-5"
+        >
+          <path d="M16 3h5v5" />
+          <path d="M4 20 21 3" />
+          <path d="M21 16v5h-5" />
+          <path d="M15 15l6 6" />
+          <path d="M4 4l5 5" />
+        </svg>
+        <span className="hidden sm:inline">Random song</span>
+      </button>
 
     </MusicShell>
   );

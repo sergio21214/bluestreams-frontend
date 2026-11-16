@@ -153,6 +153,12 @@ export default function LoginPage() {
               e.target.value
             )
           }
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              login();
+            }
+          }}
           className="
             w-full
             p-4
@@ -171,6 +177,12 @@ export default function LoginPage() {
               e.target.value
             )
           }
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              login();
+            }
+          }}
           className="
             w-full
             p-4
