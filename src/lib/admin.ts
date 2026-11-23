@@ -63,6 +63,19 @@ export type SystemHealthCheck = {
   status: string;
 };
 
+export type SystemAlert = {
+  id: number;
+  name?: string | null;
+  status?: string | null;
+  severity?: string | null;
+  source?: string | null;
+  summary?: string | null;
+  description?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  receivedAt?: string | null;
+};
+
 export type SystemOverview = {
   generatedAt?: string;
   health?: {
@@ -105,6 +118,7 @@ export type SystemOverview = {
     usableBytes?: number | null;
     usedPercent?: number | null;
   };
+  alerts?: SystemAlert[];
   links?: {
     grafana?: string | null;
     uptimeKuma?: string | null;

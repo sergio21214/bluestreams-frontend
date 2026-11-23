@@ -128,6 +128,7 @@ export default function SystemSection() {
   const services = data?.services ?? [];
   const checks = data?.health?.checks ?? [];
   const upServices = services.filter((service) => service.up).length;
+  const alerts = data?.alerts ?? [];
   const grafanaUrl = data?.links?.grafana;
   const uptimeKumaUrl = data?.links?.uptimeKuma;
 
@@ -362,6 +363,71 @@ export default function SystemSection() {
               </div>
             </Card>
           </div>
+
+          <Card>
+            <h3 className="text-sm font-semibold text-white">
+              Recent alerts
+            </h3>
+
+            <div className="mt-4 space-y-3">
+              {alerts.length === 0 && (
+                <p className="text-xs text-zinc-500">
+                  No alerts recorded.
+                </p>
+              )}
+
+              {alerts.map((alert) => (
+                <div
+                  key={alert.id}
+                  className="border-t border-white/5 pt-3 first:border-0 first:pt-0"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      tone={
+                        alert.status === 'firing'
+                          ? 'red'
+                          : 'green'
+                      }
+                    >
+                      {alert.status || 'unknown'}
+                    </Badge>
+
+                    <Badge tone="slate">
+                      {alert.severity || 'unknown'}
+                    </Badge>
+
+                    <span className="text-sm font-semibold text-white">
+                      {alert.name || 'Alert'}
+                    </span>
+
+                    <span className="text-xs text-zinc-500">
+                      {alert.source || ''}
+                    </span>
+
+                    <span className="ml-auto text-xs text-zinc-500">
+                      {alert.receivedAt
+                        ? new Date(
+                            alert.receivedAt
+                          ).toLocaleString()
+                        : ''}
+                    </span>
+                  </div>
+
+                  {alert.summary && (
+                    <p className="mt-1 text-sm text-zinc-300">
+                      {alert.summary}
+                    </p>
+                  )}
+
+                  {alert.description && (
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {alert.description}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
 
           {(grafanaUrl || uptimeKumaUrl) && (
             <div className="flex flex-wrap gap-3">
