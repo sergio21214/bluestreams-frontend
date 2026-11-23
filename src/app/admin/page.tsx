@@ -9,6 +9,7 @@ import MusicSection from '@/components/admin/MusicSection';
 import OverviewSection from '@/components/admin/OverviewSection';
 import ProfilesSection from '@/components/admin/ProfilesSection';
 import QueueSection from '@/components/admin/QueueSection';
+import SystemSection from '@/components/admin/SystemSection';
 import UsersSection from '@/components/admin/UsersSection';
 import { clearSession } from '@/lib/auth';
 import type { AdminTab } from '@/lib/admin';
@@ -22,7 +23,8 @@ const TABS: {
   { id: 'profiles', label: 'Profiles' },
   { id: 'iptv', label: 'IPTV' },
   { id: 'queue', label: 'Queue' },
-  { id: 'music', label: 'Music' }
+  { id: 'music', label: 'Music' },
+  { id: 'system', label: 'System' }
 ];
 
 export default function AdminPage() {
@@ -140,6 +142,8 @@ export default function AdminPage() {
         {tab === 'queue' && <QueueSection />}
 
         {tab === 'music' && <MusicSection />}
+
+        {tab === 'system' && <SystemSection />}
 
       </div>
 

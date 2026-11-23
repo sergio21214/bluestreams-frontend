@@ -10,7 +10,8 @@ export type AdminTab =
   | 'profiles'
   | 'iptv'
   | 'queue'
-  | 'music';
+  | 'music'
+  | 'system';
 
 export type AdminUser = {
   id: number;
@@ -55,6 +56,59 @@ export type QueueStatus = {
   processing: string[];
   waiting: string[];
   failed: string[];
+};
+
+export type SystemHealthCheck = {
+  name: string;
+  status: string;
+};
+
+export type SystemOverview = {
+  generatedAt?: string;
+  health?: {
+    status?: string;
+    checks?: SystemHealthCheck[];
+  };
+  metrics?: {
+    prometheusAvailable?: boolean;
+    requestsPerSecond?: number | null;
+    errorsPerSecond?: number | null;
+    errorRatePercent?: number | null;
+    p95LatencyMs?: number | null;
+    p99LatencyMs?: number | null;
+    heapUsedBytes?: number | null;
+    heapMaxBytes?: number | null;
+    processCpu?: number | null;
+    systemCpu?: number | null;
+  };
+  services?: Array<{
+    job: string;
+    up: boolean;
+  }>;
+  music?: {
+    queued: number;
+    downloading: number;
+    processing: number;
+    completed: number;
+    failed: number;
+  };
+  iptv?: {
+    total: number;
+    active: number;
+    dead: number;
+    expired: number;
+    unknown: number;
+    defaultActive: boolean;
+  };
+  disk?: {
+    totalBytes?: number | null;
+    usableBytes?: number | null;
+    usedPercent?: number | null;
+  };
+  links?: {
+    grafana?: string | null;
+    uptimeKuma?: string | null;
+  };
 };
 
 async function adminFetch(
